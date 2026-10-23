@@ -4,7 +4,6 @@
 
 #include "fullscrn.h"
 #include "loader.h"
-#include "objlist_class.h"
 #include "pb.h"
 #include "proj.h"
 #include "render.h"
@@ -21,19 +20,20 @@ TTableLayer::TTableLayer(TPinballTable* table): TCollisionComponent(table, -1, f
 
 	auto groupIndex = loader::query_handle("table");
 	loader::query_visual(groupIndex, 0, &visual);
+	auto spriteData = visual.Bitmap;
 
 	/*Full tilt: proj center first value is offset by resolution*/
 	auto projCenter = loader::query_float_attribute(groupIndex, 0, 700 + fullscrn::GetResolution());
 	proj::recenter(projCenter[0], projCenter[1]);
-	render::set_background_zmap(visual.ZMap, 0, 0);
+	render::set_background_zmap(spriteData.ZMap, 0, 0);
 
-	auto bmp = visual.Bitmap;
-	VisBmp = visual.Bitmap;
+	auto bmp = spriteData.Bmp;
+	VisBmp = bmp;
 	rect.XPosition = 0;
 	rect.YPosition = 0;
 	rect.Width = bmp->Width;
 	rect.Height = bmp->Height;
-	render::create_sprite(VisualTypes::None, bmp, visual.ZMap, 0, 0, &rect);
+	new render_sprite(VisualTypes::Background, bmp, spriteData.ZMap, 0, 0, &rect);
 
 	PinballTable->SoundIndex1 = visual.SoundIndex4;
 	PinballTable->SoundIndex2 = visual.SoundIndex3;
@@ -55,11 +55,13 @@ TTableLayer::TTableLayer(TPinballTable* table): TCollisionComponent(table, -1, f
 
 	GraityDirX = cos(PinballTable->GravityAnglY) * sin(PinballTable->GravityAngleX) * PinballTable->GravityDirVectMult;
 	GraityDirY = sin(PinballTable->GravityAnglY) * sin(PinballTable->GravityAngleX) * PinballTable->GravityDirVectMult;
-	auto angleMultArr = loader::query_float_attribute(groupIndex, 0, 701);
 
 	/*Full tilt hack - GraityMult should be 0.2*/
-	if (angleMultArr && !pb::FullTiltMode)
+	if (!pb::FullTiltMode && !pb::FullTiltDemoMode)
+	{
+		auto angleMultArr = loader::query_float_attribute(groupIndex, 0, 701);
 		GraityMult = *angleMultArr;
+	}
 	else
 		GraityMult = 0.2f;
 
@@ -70,37 +72,33 @@ TTableLayer::TTableLayer(TPinballTable* table): TCollisionComponent(table, -1, f
 	Threshold = visual.Kicker.Threshold;
 	Boost = 15.0f;
 
-	auto visArrPtr = visual.FloatArr;
-	Unknown1F = std::min(visArrPtr[0], std::min(visArrPtr[2], visArrPtr[4]));
-	Unknown2F = std::min(visArrPtr[1], std::min(visArrPtr[3], visArrPtr[5]));
-	Unknown3F = std::max(visArrPtr[0], std::max(visArrPtr[2], visArrPtr[4]));
-	Unknown4F = std::max(visArrPtr[1], std::max(visArrPtr[3], visArrPtr[5]));
-	auto a2 = Unknown4F - Unknown2F;
-	auto a1 = Unknown3F - Unknown1F;
-	edge_manager = new TEdgeManager(Unknown1F, Unknown2F, a1, a2);
+	auto edgePoints = reinterpret_cast<vector2*>(visual.FloatArr);
+	XMin = std::min(edgePoints[0].X, std::min(edgePoints[1].X, edgePoints[2].X));
+	YMin = std::min(edgePoints[0].Y, std::min(edgePoints[1].Y, edgePoints[2].Y));
+	XMax = std::max(edgePoints[0].X, std::max(edgePoints[1].X, edgePoints[2].X));
+	YMax = std::max(edgePoints[0].Y, std::max(edgePoints[1].Y, edgePoints[2].Y));
 
-	for (auto visFloatArrCount = visual.FloatArrCount; visFloatArrCount > 0; visFloatArrCount--)
+	auto height = YMax - YMin;
+	auto width = XMax - XMin;
+	edge_manager = new TEdgeManager(XMin, YMin, width, height);
+
+	for (auto i = 0; i < visual.FloatArrCount; i++)
 	{
 		auto line = new TLine(this,
 		                      &ActiveFlag,
 		                      visual.CollisionGroup,
-		                      visArrPtr[2],
-		                      visArrPtr[3],
-		                      visArrPtr[0],
-		                      visArrPtr[1]);
-		if (line)
-		{
-			line->place_in_grid();
-			EdgeList->Add(line);
-		}
-
-		visArrPtr += 2;
+		                      edgePoints[i + 1].X,
+		                      edgePoints[i + 1].Y,
+		                      edgePoints[i].X,
+		                      edgePoints[i].Y);
+		line->place_in_grid(&AABB);
+		EdgeList.push_back(line);
 	}
 
-	Field.Mask = -1;
-	Field.Flag2Ptr = &ActiveFlag;
+	Field.CollisionGroup = -1;
+	Field.ActiveFlag = &ActiveFlag;
 	Field.CollisionComp = this;
-	edges_insert_square(Unknown2F, Unknown1F, Unknown4F, Unknown3F, nullptr,
+	edges_insert_square(YMin, XMin, YMax, XMax, nullptr,
 	                    &Field);
 }
 
@@ -110,11 +108,11 @@ TTableLayer::~TTableLayer()
 		delete edge_manager;
 }
 
-int TTableLayer::FieldEffect(TBall* ball, vector_type* vecDst)
+int TTableLayer::FieldEffect(TBall* ball, vector2* vecDst)
 {
-	vecDst->X = GraityDirX - (0.5f - RandFloat() + ball->Acceleration.X) *
+	vecDst->X = GraityDirX - (0.5f - RandFloat() + ball->Direction.X) *
 		ball->Speed * GraityMult;
-	vecDst->Y = GraityDirY - ball->Acceleration.Y * ball->Speed * GraityMult;
+	vecDst->Y = GraityDirY - ball->Direction.Y * ball->Speed * GraityMult;
 	return 1;
 }
 
@@ -133,10 +131,10 @@ void TTableLayer::edges_insert_square(float y0, float x0, float y1, float x1, TE
 	int xMaxBox = edge_manager->box_x(xMax);
 	int yMaxBox = edge_manager->box_y(yMax);
 
-	float boxX = static_cast<float>(xMinBox) * edge_manager->AdvanceX + edge_manager->X;
+	float boxX = static_cast<float>(xMinBox) * edge_manager->AdvanceX + edge_manager->MinX;
 	for (int indexX = xMinBox; indexX <= xMaxBox; ++indexX)
 	{
-		float boxY = static_cast<float>(yMinBox) * edge_manager->AdvanceY + edge_manager->Y;
+		float boxY = static_cast<float>(yMinBox) * edge_manager->AdvanceY + edge_manager->MinY;
 		for (int indexY = yMinBox; indexY <= yMaxBox; ++indexY)
 		{
 			if (xMax >= boxX && xMin <= boxX + edge_manager->AdvanceX &&
@@ -160,7 +158,7 @@ void TTableLayer::edges_insert_square(float y0, float x0, float y1, float x1, TE
 void TTableLayer::edges_insert_circle(circle_type* circle, TEdgeSegment* edge, field_effect_type* field)
 {
 	ray_type ray{};
-	vector_type vec1{};
+	vector2 vec1{};
 
 	auto radiusM = sqrt(circle->RadiusSq) + edge_manager->AdvanceX * 0.001f;
 	auto radiusMSq = radiusM * radiusM;
@@ -181,10 +179,10 @@ void TTableLayer::edges_insert_circle(circle_type* circle, TEdgeSegment* edge, f
 	xMaxBox = edge_manager->increment_box_x(xMaxBox);
 	yMaxBox = edge_manager->increment_box_y(yMaxBox);
 
-	vec1.X = static_cast<float>(dirX) * edge_manager->AdvanceX + edge_manager->X;
+	vec1.X = static_cast<float>(dirX) * edge_manager->AdvanceX + edge_manager->MinX;
 	for (auto indexX = dirX; indexX <= xMaxBox; ++indexX)
 	{
-		vec1.Y = static_cast<float>(dirY) * edge_manager->AdvanceY + edge_manager->Y;
+		vec1.Y = static_cast<float>(dirY) * edge_manager->AdvanceY + edge_manager->MinY;
 		for (int indexY = dirY; indexY <= yMaxBox; ++indexY)
 		{
 			auto vec1XAdv = vec1.X + edge_manager->AdvanceX;
@@ -219,45 +217,45 @@ void TTableLayer::edges_insert_circle(circle_type* circle, TEdgeSegment* edge, f
 					ray.Direction.X = 1.0;
 					ray.Direction.Y = 0.0;
 					ray.MaxDistance = edge_manager->AdvanceX;
-					if (maths::ray_intersect_circle(&ray, circle) < 1000000000.0f)
+					if (maths::ray_intersect_circle(ray, *circle) < 1000000000.0f)
 						break;
 
 					ray.Direction.X = -1.0;
 					ray.Origin.X = ray.Origin.X + edge_manager->AdvanceX;
-					if (maths::ray_intersect_circle(&ray, circle) < 1000000000.0f)
+					if (maths::ray_intersect_circle(ray, *circle) < 1000000000.0f)
 						break;
 
 					ray.Direction.X = 0.0;
 					ray.Direction.Y = 1.0;
 					ray.MaxDistance = edge_manager->AdvanceY;
-					if (maths::ray_intersect_circle(&ray, circle) < 1000000000.0f)
+					if (maths::ray_intersect_circle(ray, *circle) < 1000000000.0f)
 						break;
 
 					ray.Direction.Y = -1.0;
 					ray.Origin.Y = ray.Origin.Y + edge_manager->AdvanceY;
-					if (maths::ray_intersect_circle(&ray, circle) < 1000000000.0f)
+					if (maths::ray_intersect_circle(ray, *circle) < 1000000000.0f)
 						break;
 
 					ray.Direction.Y = 0.0;
 					ray.Direction.X = -1.0;
 					ray.MaxDistance = edge_manager->AdvanceX;
-					if (maths::ray_intersect_circle(&ray, circle) < 1000000000.0f)
+					if (maths::ray_intersect_circle(ray, *circle) < 1000000000.0f)
 						break;
 
 					ray.Direction.X = 1.0;
 					ray.Origin.X = ray.Origin.X - edge_manager->AdvanceX;
-					if (maths::ray_intersect_circle(&ray, circle) < 1000000000.0f)
+					if (maths::ray_intersect_circle(ray, *circle) < 1000000000.0f)
 						break;
 
 					ray.Direction.X = 0.0;
 					ray.Direction.Y = -1.0;
 					ray.MaxDistance = edge_manager->AdvanceY;
-					if (maths::ray_intersect_circle(&ray, circle) < 1000000000.0f)
+					if (maths::ray_intersect_circle(ray, *circle) < 1000000000.0f)
 						break;
 
 					ray.Direction.Y = 1.0;
 					ray.Origin.Y = ray.Origin.Y - edge_manager->AdvanceY;
-					if (maths::ray_intersect_circle(&ray, circle) < 1000000000.0f)
+					if (maths::ray_intersect_circle(ray, *circle) < 1000000000.0f)
 						break;
 
 					collision = false;

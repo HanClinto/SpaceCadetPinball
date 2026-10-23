@@ -18,8 +18,8 @@ TTextBox::TTextBox(TPinballTable* table, int groupIndex) : TPinballComponent(tab
 	Height = 0;
 	BgBmp = render::background_bitmap;
 	Font = score::msg_fontp;
-	Message1 = nullptr;
-	Message2 = nullptr;
+	CurrentMessage = nullptr;
+	PreviousMessage = nullptr;
 	Timer = 0;
 
 	if (groupIndex > 0)
@@ -42,16 +42,16 @@ TTextBox::~TTextBox()
 			timer::kill(Timer);
 		Timer = 0;
 	}
-	while (Message1)
+	while (CurrentMessage)
 	{
-		TTextBoxMessage* message = Message1;
+		TTextBoxMessage* message = CurrentMessage;
 		TTextBoxMessage* nextMessage = message->NextMessage;
 		delete message;
-		Message1 = nextMessage;
+		CurrentMessage = nextMessage;
 	}
 }
 
-int TTextBox::Message(int code, float value)
+int TTextBox::Message(MessageCode code, float value)
 {
 	return 0;
 }
@@ -59,24 +59,24 @@ int TTextBox::Message(int code, float value)
 void TTextBox::TimerExpired(int timerId, void* caller)
 {
 	auto tb = static_cast<TTextBox*>(caller);
-	TTextBoxMessage* message = tb->Message1;
+	TTextBoxMessage* message = tb->CurrentMessage;
 	tb->Timer = 0;
 	if (message)
 	{
 		TTextBoxMessage* nextMessage = message->NextMessage;
 		delete message;
-		tb->Message1 = nextMessage;
+		tb->CurrentMessage = nextMessage;
 		tb->Draw();
-		control::handler(60, tb);
+		control::handler(MessageCode::ControlTimerExpired, tb);
 	}
 }
 
-void TTextBox::Clear()
+void TTextBox::Clear(bool lowPriorityOnly)
 {
 	gdrv_bitmap8* bmp = BgBmp;
 	if (bmp)
 		gdrv::copy_bitmap(
-			&render::vscreen,
+			render::vscreen,
 			Width,
 			Height,
 			OffsetX,
@@ -85,31 +85,32 @@ void TTextBox::Clear()
 			OffsetX,
 			OffsetY);
 	else
-		gdrv::fill_bitmap(&render::vscreen, Width, Height, OffsetX, OffsetY, 0);	
+		gdrv::fill_bitmap(render::vscreen, Width, Height, OffsetX, OffsetY, 0);
 	if (Timer)
 	{
 		if (Timer != -1)
 			timer::kill(Timer);
 		Timer = 0;
 	}
-	while (Message1)
+	while (CurrentMessage && (!lowPriorityOnly || CurrentMessage->LowPriority))
 	{
-		TTextBoxMessage* message = Message1;
-		TTextBoxMessage* nextMessage = message->NextMessage;
+		auto message = CurrentMessage;
+		CurrentMessage = message->NextMessage;
 		delete message;
-		Message1 = nextMessage;
 	}
+	if (CurrentMessage)
+		Draw();
 }
 
-void TTextBox::Display(char* text, float time)
+void TTextBox::Display(const char* text, float time, bool lowPriority)
 {
 	if (!text)
 		return;
 
-	if (Message1 && !strcmp(text, Message2->Text))
+	if (CurrentMessage && !strcmp(text, PreviousMessage->Text))
 	{
-		Message2->Refresh(time);
-		if (Message2 == Message1)
+		PreviousMessage->Refresh(time);
+		if (PreviousMessage == CurrentMessage)
 		{
 			if (Timer && Timer != -1)
 				timer::kill(Timer);
@@ -124,25 +125,61 @@ void TTextBox::Display(char* text, float time)
 		if (Timer == -1)
 			Clear();
 
-		auto message = new TTextBoxMessage(text, time);
-		if (message)
+		auto message = new TTextBoxMessage(text, time, lowPriority);
+		if (message->Text)
 		{
-			if (message->Text)
-			{
-				if (Message1)
-					Message2->NextMessage = message;
-				else
-					Message1 = message;
-				Message2 = message;
-				if (Timer == 0)
-					Draw();
-			}
+			if (CurrentMessage)
+				PreviousMessage->NextMessage = message;
 			else
-			{
-				delete message;
-			}
+				CurrentMessage = message;
+			PreviousMessage = message;
+			if (Timer == 0)
+				Draw();
+		}
+		else
+		{
+			delete message;
 		}
 	}
+}
+
+void TTextBox::DrawImGui()
+{
+	// Do nothing when using a font (the text will be rendered to VScreen in TTextBox::Draw)
+	if (Font || !CurrentMessage)
+		return;
+
+	char windowName[64];
+	SDL_Rect rect;
+	ImGuiWindowFlags window_flags =
+		ImGuiWindowFlags_NoBackground |
+		ImGuiWindowFlags_NoDecoration |
+		ImGuiWindowFlags_NoSavedSettings |
+		ImGuiWindowFlags_NoFocusOnAppearing |
+		ImGuiWindowFlags_NoInputs;
+
+	rect.x = OffsetX;
+	rect.y = OffsetY;
+	rect.w = Width;
+	rect.h = Height;
+
+	rect = fullscrn::GetScreenRectFromPinballRect(rect);
+
+	ImGui::SetNextWindowPos(ImVec2(static_cast<float>(rect.x), static_cast<float>(rect.y)));
+	ImGui::SetNextWindowSize(ImVec2(static_cast<float>(rect.w), static_cast<float>(rect.h)));
+
+	// Use the pointer to generate a window unique name per text box
+	snprintf(windowName, sizeof(windowName), "TTextBox_%p", static_cast<void*>(this));
+	if (ImGui::Begin(windowName, nullptr, window_flags))
+	{
+		ImGui::SetWindowFontScale(fullscrn::GetScreenToPinballRatio());
+
+		// ToDo: centered text in FT
+		ImGui::PushStyleColor(ImGuiCol_Text, pb::TextBoxColor);
+		ImGui::TextWrapped("%s", CurrentMessage->Text);
+		ImGui::PopStyleColor();
+	}
+	ImGui::End();
 }
 
 void TTextBox::Draw()
@@ -150,7 +187,7 @@ void TTextBox::Draw()
 	auto bmp = BgBmp;
 	if (bmp)
 		gdrv::copy_bitmap(
-			&render::vscreen,
+			render::vscreen,
 			Width,
 			Height,
 			OffsetX,
@@ -159,105 +196,118 @@ void TTextBox::Draw()
 			OffsetX,
 			OffsetY);
 	else
-		gdrv::fill_bitmap(&render::vscreen, Width, Height, OffsetX, OffsetY, 0);
+		gdrv::fill_bitmap(render::vscreen, Width, Height, OffsetX, OffsetY, 0);
 
 	bool display = false;
-	while (Message1)
+	while (CurrentMessage)
 	{
-		if (Message1->Time == -1.0f)
+		if (CurrentMessage->Time == -1.0f)
 		{
-			if (!Message1->NextMessage)
+			if (!CurrentMessage->NextMessage)
 			{
 				Timer = -1;
 				display = true;
 				break;
 			}
 		}
-		else if (Message1->TimeLeft() >= -2.0f)
+		else if (CurrentMessage->TimeLeft() >= -2.0f)
 		{
-			Timer = timer::set(std::max(Message1->TimeLeft(), 0.25f), this, TimerExpired);
+			Timer = timer::set(std::max(CurrentMessage->TimeLeft(), 0.25f), this, TimerExpired);
 			display = true;
 			break;
 		}
 
-		auto tmp = Message1;
-		Message1 = Message1->NextMessage;
+		auto tmp = CurrentMessage;
+		CurrentMessage = CurrentMessage->NextMessage;
 		delete tmp;
 	}
 
 	if (display)
 	{
-		auto font = Font;
-		if (!font)
+		if (!Font)
 		{
-			gdrv::grtext_draw_ttext_in_box(
-				Message1->Text,
-				render::vscreen.XPosition + OffsetX,
-				render::vscreen.YPosition + OffsetY,
-				Width,
-				Height,
-				255);
+			// Immediate mode drawing using system font is handled by TTextBox::DrawImGui
 			return;
 		}
 
-		auto text = Message1->Text;
-		for (auto y = OffsetY; ; y += font->Height)
+		std::vector<LayoutResult> lines{};
+		auto textHeight = 0;
+		for (auto text = CurrentMessage->Text; ; textHeight += Font->Height)
 		{
-			auto curChar = *text;
-			if (!curChar || y + font->Height > OffsetY + Height)
+			if (!text[0] || textHeight + Font->Height > Height)
 				break;
 
-			auto totalWidth = 0;
-			char* textEndSpace = nullptr;
-			auto textEnd = text;
-			while (true)
-			{
-				auto maskedChar = curChar & 0x7F;
-				if (!maskedChar || maskedChar == '\n')
-					break;
-				auto charBmp = font->Chars[maskedChar];
-				if (charBmp)
-				{
-					auto width = charBmp->Width + font->GapWidth + totalWidth;
-					if (width > Width)
-					{
-						if (textEndSpace)
-							textEnd = textEndSpace;
-						break;
-					}
-					if (*textEnd == ' ')
-						textEndSpace = textEnd;
-					curChar = *(textEnd + 1);
-					totalWidth = width;
-					++textEnd;
-				}
-				else
-				{
-					curChar = *textEnd;
-				}
-			}
+			auto line = LayoutTextLine(text);
+			if (line.Start == line.End)
+				break;
+			lines.push_back(line);
+			text = line.End;
+		}
 
+		// Textboxes in FT display texts centered
+		auto offY = OffsetY;
+		if (pb::FullTiltMode)
+			offY += (Height - textHeight) / 2;
+		for (auto line : lines)
+		{
 			auto offX = OffsetX;
-			while (text < textEnd)
+			if (pb::FullTiltMode)
+				offX += (Width - line.Width) / 2;
+			for (auto text = line.Start; text < line.End; text++)
 			{
-				auto charBmp = font->Chars[*text++ & 0x7F];
+				auto charBmp = Font->Chars[*text & 0x7F];
 				if (charBmp)
 				{
 					auto height = charBmp->Height;
 					auto width = charBmp->Width;
 					if (render::background_bitmap)
-						gdrv::copy_bitmap_w_transparency(&render::vscreen, width, height, offX, y, charBmp, 0,
+						gdrv::copy_bitmap_w_transparency(render::vscreen, width, height, offX, offY, charBmp, 0,
 						                                 0);
 					else
-						gdrv::copy_bitmap(&render::vscreen, width, height, offX, y, charBmp, 0, 0);
-					font = Font;
-					offX += charBmp->Width + font->GapWidth;
+						gdrv::copy_bitmap(render::vscreen, width, height, offX, offY, charBmp, 0, 0);
+					offX += charBmp->Width + Font->GapWidth;
 				}
 			}
-			while ((*text & 0x7F) == ' ')
-				++text;
-			if ((*text & 0x7F) == '\n')
-				++text;
+			offY += Font->Height;
 		}
-	}	
+	}
+}
+
+TTextBox::LayoutResult TTextBox::LayoutTextLine(char* textStart) const
+{
+	auto lineWidth = 0, wordWidth = 0;
+	char *wordBoundary = nullptr, *textEnd;
+	for (textEnd = textStart; ; ++textEnd)
+	{
+		auto maskedChar = textEnd[0] & 0x7F;
+		if (!maskedChar || maskedChar == '\n')
+			break;
+
+		auto charBmp = Font->Chars[maskedChar];
+		if (!charBmp)
+			continue;
+
+		auto width = lineWidth + charBmp->Width + Font->GapWidth;
+		if (width > Width)
+		{
+			if (wordBoundary)
+			{
+				textEnd = wordBoundary;
+				lineWidth = wordWidth;
+			}
+			break;
+		}
+		if (maskedChar == ' ')
+		{
+			wordBoundary = textEnd;
+			wordWidth = width;
+		}
+		lineWidth = width;
+	}
+
+	while ((*textEnd & 0x7F) == ' ')
+		++textEnd;
+	if ((*textEnd & 0x7F) == '\n')
+		++textEnd;
+	return LayoutResult{textStart, textEnd, lineWidth};
 }

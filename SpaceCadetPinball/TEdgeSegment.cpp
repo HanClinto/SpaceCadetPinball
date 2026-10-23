@@ -1,7 +1,6 @@
 #include "pch.h"
 #include "TEdgeSegment.h"
 
-#include "objlist_class.h"
 #include "TCircle.h"
 #include "TCollisionComponent.h"
 #include "TLine.h"
@@ -9,7 +8,7 @@
 TEdgeSegment::TEdgeSegment(TCollisionComponent* collComp, char* activeFlag, unsigned collisionGroup)
 {
 	CollisionComponent = collComp;
-	ActiveFlag = activeFlag;
+	ActiveFlagPtr = activeFlag;
 	CollisionGroup = collisionGroup;
 	ProcessedFlag = 0;
 }
@@ -21,7 +20,8 @@ void TEdgeSegment::port_draw()
 TEdgeSegment* TEdgeSegment::install_wall(float* floatArr, TCollisionComponent* collComp, char* activeFlagPtr,
                                          unsigned int collisionGroup, float offset, size_t wallValue)
 {
-	vector_type center{}, start{}, end{}, prevCenter{}, vec1{}, vec2{}, dstVec{};
+	vector2 center{}, start{}, end{}, prevCenter{};
+	vector3 vec1{}, vec2{}, dstVec{};
 	TEdgeSegment* edge = nullptr;
 
 	wall_type wallType = static_cast<wall_type>(static_cast<int>(floor(*floatArr) - 1.0f));
@@ -33,15 +33,10 @@ TEdgeSegment* TEdgeSegment::install_wall(float* floatArr, TCollisionComponent* c
 			center.Y = floatArr[2];
 			auto radius = offset + floatArr[3];
 			auto circle = new TCircle(collComp, activeFlagPtr, collisionGroup, &center, radius);
+			circle->WallValue = reinterpret_cast<void*>(wallValue);
+			circle->place_in_grid(&collComp->AABB);
+			collComp->EdgeList.push_back(circle);
 			edge = circle;
-
-			if (circle)
-			{
-				circle->WallValue = reinterpret_cast<void*>(wallValue);
-				circle->place_in_grid();
-			}
-
-			collComp->EdgeList->Add(circle);
 			break;
 		}
 	case wall_type::Line:
@@ -50,16 +45,12 @@ TEdgeSegment* TEdgeSegment::install_wall(float* floatArr, TCollisionComponent* c
 			start.Y = floatArr[2];
 			end.X = floatArr[3];
 			end.Y = floatArr[4];
-			auto line = new TLine(collComp, activeFlagPtr, collisionGroup, &start, &end);
+			auto line = new TLine(collComp, activeFlagPtr, collisionGroup, start, end);
+			line->WallValue = reinterpret_cast<void*>(wallValue);
+			line->Offset(offset);
+			line->place_in_grid(&collComp->AABB);
+			collComp->EdgeList.push_back(line);
 			edge = line;
-
-			if (line)
-			{
-				line->WallValue = reinterpret_cast<void*>(wallValue);
-				line->Offset(offset);
-				line->place_in_grid();
-				collComp->EdgeList->Add(line);
-			}
 			break;
 		}
 	default:
@@ -93,19 +84,15 @@ TEdgeSegment* TEdgeSegment::install_wall(float* floatArr, TCollisionComponent* c
 					vec1.Y = center.Y - prevCenter.Y;
 					vec2.X = centerX2 - centerX1;
 					vec2.Y = centerY2 - center.Y;
-					maths::cross(&vec1, &vec2, &dstVec);
-					if (dstVec.Z > 0.0f && offset > 0.0f ||
-						dstVec.Z < 0.0f && offset < 0.0f)
+					maths::cross(vec1, vec2, dstVec);
+					if ((dstVec.Z > 0.0f && offset > 0.0f) ||
+						(dstVec.Z < 0.0f && offset < 0.0f))
 					{
 						float radius = offset * 1.001f;
 						auto circle = new TCircle(collComp, activeFlagPtr, collisionGroup, &center, radius);
-
-						if (circle)
-						{
-							circle->WallValue = reinterpret_cast<void*>(wallValue);
-							circle->place_in_grid();
-							collComp->EdgeList->Add(circle);
-						}
+						circle->WallValue = reinterpret_cast<void*>(wallValue);
+						circle->place_in_grid(&collComp->AABB);
+						collComp->EdgeList.push_back(circle);
 					}
 				}
 
@@ -113,17 +100,13 @@ TEdgeSegment* TEdgeSegment::install_wall(float* floatArr, TCollisionComponent* c
 				start.Y = floatArrPtr[1];
 				end.X = floatArrPtr[2];
 				end.Y = floatArrPtr[3];
-				auto line = new TLine(collComp, activeFlagPtr, collisionGroup, &start, &end);
+				auto line = new TLine(collComp, activeFlagPtr, collisionGroup, start, end);
+				line->WallValue = reinterpret_cast<void*>(wallValue);
+				line->Offset(offset);
+				line->place_in_grid(&collComp->AABB);
+				collComp->EdgeList.push_back(line);
+
 				edge = line;
-
-				if (line)
-				{
-					line->WallValue = reinterpret_cast<void*>(wallValue);
-					line->Offset(offset);
-					line->place_in_grid();
-					collComp->EdgeList->Add(line);
-				}
-
 				prevCenter = center;
 			}
 		}

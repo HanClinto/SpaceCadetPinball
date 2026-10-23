@@ -21,6 +21,9 @@ bld/
 [Bb]in/
 [Oo]bj/
 [Ll]og/
+ARM/
+ARM64/
+win32/
 
 # Visual Studio 2015 cache/options directory
 .vs/
@@ -263,7 +266,7 @@ __pycache__/
 /Export
 /DrMem
 /Doc private
-# Windows local libraries
+# Windows and macOS local libraries
 /Libs
 
 #CMake generated
@@ -273,3 +276,27 @@ out/
 # Windows XP stuff
 DebugWinXp/
 ReleaseWinXp/
+
+### CMake ###
+CMakeLists.txt.user
+CMakeCache.txt
+CMakeFiles
+CMakeScripts
+Testing
+Makefile
+cmake_install.cmake
+install_manifest.txt
+compile_commands.json
+CTestTestfile.cmake
+_deps
+
+### CMake Patch ###
+# External projects
+*-prefix/
+
+### Ninja ###
+.ninja_deps
+.ninja_log
+build.ninja
+# Build directory
+/build

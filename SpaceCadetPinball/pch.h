@@ -28,19 +28,48 @@
 #include <cstring>
 #include <string>
 #include <thread>
+#include <map>
+#include <unordered_map>
+#include <initializer_list>
+//#include <array>
 
 #define SDL_MAIN_HANDLED
 #include "SDL.h"
 #include <SDL_mixer.h>
 
-//https://github.com/ocornut/imgui 7b913db1ce9dd2fd98e5790aa59974dd4496be3b
+// MIX_INIT_FLUIDSYNTH was renamed to MIX_INIT_MID in SDL_mixer v2.0.2
+// Older versions of SDL_mixer did not have SDL_MIXER_VERSION_ATLEAST
+constexpr int MIX_INIT_MID_Proxy =
+#if SDL_VERSIONNUM(SDL_MIXER_MAJOR_VERSION, SDL_MIXER_MINOR_VERSION, SDL_MIXER_PATCHLEVEL) >= SDL_VERSIONNUM(2, 0, 2)
+	MIX_INIT_MID;
+#else
+	MIX_INIT_FLUIDSYNTH;
+#endif
+
+//https://github.com/ocornut/imgui 59b63defe5421642fb0cdcfd1fa850fc85a13791 + patches
 #include "imgui.h"
 #include "imgui_internal.h"
 #include "imgui_impl_sdl.h"
-//https://github.com/Tyyppi77/imgui_sdl 01deb04b102b6a1c15c7fdec1977a2c96a885e6f
-#include "imgui_sdl.h"
 
-typedef uint32_t  DWORD;
+// imgui_impl_sdlrenderer is faster and more accurate, but it requires newer SDL.
+#if SDL_VERSION_ATLEAST(2, 0, 17)
+#include "imgui_impl_sdlrenderer.h"
+constexpr const char* ImGuiRender = "HW";
+inline void ImGui_Render_Init(SDL_Renderer* renderer) { ImGui_ImplSDLRenderer_Init(renderer); }
+inline void ImGui_Render_Shutdown() { ImGui_ImplSDLRenderer_Shutdown(); }
+inline void ImGui_Render_NewFrame() { ImGui_ImplSDLRenderer_NewFrame(); }
+inline void ImGui_Render_RenderDrawData(ImDrawData* draw_data) { ImGui_ImplSDLRenderer_RenderDrawData(draw_data); }
+#else
+//https://github.com/Tyyppi77/imgui_sdl 01deb04b102b6a1c15c7fdec1977a2c96a885e6f + patches
+#include "imgui_sdl.h"
+constexpr const char* ImGuiRender = "SW";
+inline void ImGui_Render_Init(SDL_Renderer* renderer) { ImGuiSDL::Initialize(renderer, 0, 0); }
+inline void ImGui_Render_Shutdown() { ImGuiSDL::Deinitialize(); }
+inline void ImGui_Render_NewFrame() { }
+inline void ImGui_Render_RenderDrawData(ImDrawData* draw_data) { ImGuiSDL::Render(draw_data); }
+#endif
+
+
 typedef char* LPSTR;
 typedef const char* LPCSTR;
 
@@ -68,5 +97,40 @@ inline float RandFloat()
 {
 	return static_cast<float>(std::rand() / static_cast<double>(RAND_MAX));
 }
+
+template <typename T>
+constexpr int Sign(T val)
+{
+	return (T(0) < val) - (val < T(0));
+}
+
+template <typename T>
+const T& Clamp(const T& n, const T& lower, const T& upper)
+{
+	return std::max(lower, std::min(n, upper));
+}
+
+// UTF-8 path adapter for fopen on Windows, implemented in SpaceCadetPinball.cpp
+#ifdef _WIN32
+extern FILE* fopenu(const char* path, const char* opt);
+#else
+inline FILE* fopenu(const char* path, const char* opt)
+{
+	return fopen(path, opt);
+}
+#endif
+
+// Platform specific data paths not found in SDL
+constexpr const char* PlatformDataPaths[2] = 
+{
+	#ifdef _WIN32
+	nullptr
+	#else
+	"/usr/local/share/SpaceCadetPinball/",
+	"/usr/share/SpaceCadetPinball/"
+	#endif
+};
+
+constexpr float Pi = 3.14159265358979323846f;
 
 #endif //PCH_H

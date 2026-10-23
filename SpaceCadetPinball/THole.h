@@ -8,22 +8,22 @@ class THole :
 {
 public:
 	THole(TPinballTable* table, int groupIndex);
-	int Message(int code, float value) override;
-	void Collision(TBall* ball, vector_type* nextPosition, vector_type* direction, float coef,
+	int Message(MessageCode code, float value) override;
+	void Collision(TBall* ball, vector2* nextPosition, vector2* direction, float distance,
 	               TEdgeSegment* edge) override;
-	int FieldEffect(TBall* ball, vector_type* vecDst) override;
+	int FieldEffect(TBall* ball, vector2* vecDst) override;
 
 	static void TimerExpired(int timerId, void* caller);
 
-	int BallCapturedFlag;
-	int BallCapturedSecondStage;
+	bool BallCapturedFlag{};
+	bool BallCapturedSecondStage{};
 	int Timer;
 	float Unknown3;
 	float Unknown4;
 	float GravityMult;
 	float ZSetValue;
-	int FieldFlag;
+	int CollisionMask;
 	float GravityPull;
-	circle_type Circle;
-	field_effect_type Field;
+	circle_type Circle{};
+	field_effect_type Field{};
 };

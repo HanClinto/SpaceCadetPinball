@@ -82,7 +82,7 @@ SET(SDL2_SEARCH_PATHS
 FIND_PATH(SDL2_INCLUDE_DIR SDL.h
 	HINTS
 	$ENV{SDL2DIR}
-	PATH_SUFFIXES include/SDL2 include
+	PATH_SUFFIXES include/SDL2 include SDL2
 	PATHS ${SDL2_SEARCH_PATHS}
 )
 
@@ -152,7 +152,7 @@ IF(SDL2_LIBRARY_TEMP)
 	# In fact, there seems to be a problem if I used the Threads package
 	# and try using this line, so I'm just skipping it entirely for OS X.
 	IF(NOT APPLE)
-		SET(SDL2_LIBRARY_TEMP ${SDL2_LIBRARY_TEMP} ${CMAKE_THREAD_LIBS_INIT})
+		SET(SDL2_LIBRARY_TEMP ${CMAKE_THREAD_LIBS_INIT} ${SDL2_LIBRARY_TEMP})
 	ENDIF(NOT APPLE)
 
 	# For MinGW library

@@ -1,9 +1,12 @@
 #pragma once
-#include "objlist_class.h"
 
 #ifdef MUSIC_TSF
 #include "tml.h"
 #include "tsf.h"
+// A loaded song is its first MIDI message; TinySoundFont plays it from SDL_mixer's music hook
+using MusicHandle = tml_message;
+#else
+using MusicHandle = Mix_Music;
 #endif
 
 constexpr uint32_t SwapByteOrderInt(uint32_t val)
@@ -23,36 +26,36 @@ constexpr uint16_t SwapByteOrderShort(uint16_t val)
 #pragma pack(1)
 struct riff_block
 {
-	DWORD TkStart;
-	DWORD CbBuffer;
+	uint32_t TkStart;
+	uint32_t CbBuffer;
 	char AData[4];
 };
 
 struct riff_data
 {
-	DWORD Data;
-	DWORD DataSize;
-	DWORD BlocksPerChunk;
+	uint32_t Data;
+	uint32_t DataSize;
+	uint32_t BlocksPerChunk;
 	riff_block Blocks[1];
 };
 
 struct riff_header
 {
-	DWORD Riff;
-	DWORD FileSize;
-	DWORD Mids;
-	DWORD Fmt;
-	DWORD FmtSize;
-	DWORD dwTimeFormat;
-	DWORD cbMaxBuffer;
-	DWORD dwFlags;
+	uint32_t Riff;
+	uint32_t FileSize;
+	uint32_t Mids;
+	uint32_t Fmt;
+	uint32_t FmtSize;
+	uint32_t dwTimeFormat;
+	uint32_t cbMaxBuffer;
+	uint32_t dwFlags;
 	riff_data Data;
 };
 
 struct midi_event
 {
-	DWORD iTicks;
-	DWORD iEvent;
+	uint32_t iTicks;
+	uint32_t iEvent;
 };
 
 struct midi_header
@@ -62,7 +65,7 @@ struct midi_header
 	{
 	}
 
-	const char MThd[4]{ 'M','T','h','d' };
+	const char MThd[4]{'M', 'T', 'h', 'd'};
 	const uint32_t chunklen = SwapByteOrderInt(6);
 	const int16_t format = SwapByteOrderShort(0);
 	const uint16_t ntracks = SwapByteOrderShort(1);
@@ -76,7 +79,7 @@ struct midi_track
 	{
 	}
 
-	const char MTrk[4]{ 'M','T','r','k' };
+	const char MTrk[4]{'M', 'T', 'r', 'k'};
 	uint32_t chunklen;
 };
 
@@ -89,39 +92,45 @@ static_assert(sizeof(midi_track) == 8, "Wrong size of midi_track");
 
 #pragma pack(pop)
 
-struct midi_song 
+enum class MidiTracks
 {
-	bool valid;
-#ifdef MUSIC_SDL
-	Mix_Music* handle;
-#elif defined(MUSIC_TSF)
-	tml_message* start;
-#else
-	void* dummy;
-#endif
+	None,
+	Track1,
+	Track2,
+	Track3
 };
 
 class midi
 {
 public:
-	static int play_pb_theme(int flag);
-	static int music_stop();
-	static int music_init();
+	static int music_init(bool mixOpen, int volume);
 	static void music_shutdown();
+	static void music_play();
+	static void music_stop();
+	static void SetVolume(int volume);
+	static bool play_track(MidiTracks track, bool replay);
+	static MidiTracks get_active_track();
 private:
-	static midi_song currentMidi;
-#ifdef MUSIC_TSF
-	static tml_message* currentMessage;
-	static void sdl_audio_callback(void* data, Uint8 *stream, int len);
-#endif
+	static std::vector<MusicHandle*> LoadedTracks;
+	static MusicHandle* track1, * track2, * track3;
+	static MidiTracks active_track, NextTrack;
+	static int Volume;
+	static bool IsPlaying, MixOpen;
 
-	static std::vector<midi_song> TrackList;
-	static midi_song track1, track2, track3, active_track, active_track2;
-	static int some_flag1;
-	static int music_init_ft();
-	static void music_shutdown_ft();
-	static midi_song load_track(std::string fileName);
-	static int play_ft(midi_song* midi);
-	static int stop_ft();
+	static void StopPlayback();
+	static MusicHandle* load_track(std::string fileName);
+	static MusicHandle* load_track_sub(std::string fileName, bool isMidi);
+	static MusicHandle* TrackToMidi(MidiTracks track);
 	static std::vector<uint8_t>* MdsToMidi(std::string file);
+
+	static MusicHandle* LoadFromRW(SDL_RWops* rw);
+	static void FreeTrack(MusicHandle* track);
+	static bool StartTrack(MusicHandle* track);
+	static void HaltTrack();
+#ifdef MUSIC_TSF
+	static tsf* Synth;
+	static MusicHandle *SongStart, *SongPos;
+	static double SongTimeMs, MsPerSample;
+	static void TsfCallback(void* udata, Uint8* stream, int len);
+#endif
 };

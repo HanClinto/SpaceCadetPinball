@@ -1,10 +1,11 @@
 #pragma once
-#include "gdrv.h"
 #include "maths.h"
-#include "zdrv.h"
 
 
-struct DatFile;
+class TPinballComponent;
+struct zmap_header_type;
+struct gdrv_bitmap8;
+class DatFile;
 
 struct errorMsg
 {
@@ -25,11 +26,16 @@ struct visualKickerStruct
 	float Threshold;
 	float Boost;
 	float ThrowBallMult;
-	vector_type ThrowBallAcceleration;
+	vector3 ThrowBallDirection;
 	float ThrowBallAngleMult;
 	int HardHitSoundId;
 };
 
+struct SpriteData
+{
+	gdrv_bitmap8* Bmp;
+	zmap_header_type* ZMap;
+};
 
 struct visualStruct
 {
@@ -42,8 +48,7 @@ struct visualStruct
 	int CollisionGroup;
 	int SoundIndex4;
 	int SoundIndex3;
-	gdrv_bitmap8* Bitmap;
-	zmap_header_type* ZMap;
+	SpriteData Bitmap;
 };
 
 #pragma pack(push)
@@ -99,7 +104,7 @@ public:
 	static float* query_float_attribute(int groupIndex, int groupIndexOffset, int firstValue);
 	static float query_float_attribute(int groupIndex, int groupIndexOffset, int firstValue, float defVal);
 	static int16_t* query_iattribute(int groupIndex, int firstValue, int* arraySize);
-	static float play_sound(int soundIndex);
+	static float play_sound(int soundIndex, TPinballComponent *soundSource, const char* info);
 	static DatFile* loader_table;
 private:
 	static errorMsg loader_errors[];

@@ -4,230 +4,243 @@
 
 #include "control.h"
 #include "loader.h"
-#include "objlist_class.h"
 #include "render.h"
 #include "timer.h"
 #include "TPinballTable.h"
 
 TLight::TLight(TPinballTable* table, int groupIndex) : TPinballComponent(table, groupIndex, true)
 {
-	Timer1 = 0;
-	FlasherActive = 0;
-	Timer2 = 0;
-	Flasher.Timer = 0;
+	TimeoutTimer = 0;
+	FlasherOnFlag = false;
+	UndoOverrideTimer = 0;
+	FlashTimer = 0;
 	Reset();
 	float* floatArr1 = loader::query_float_attribute(groupIndex, 0, 900);
-	Flasher.TimerDelay[0] = *floatArr1;
-	FlasherDelay[0] = *floatArr1;
+	FlashDelay[0] = *floatArr1;
+	SourceDelay[0] = *floatArr1;
 	float* floatArr2 = loader::query_float_attribute(groupIndex, 0, 901);
-	Flasher.TimerDelay[1] = *floatArr2;
-	FlasherDelay[1] = *floatArr2;
+	FlashDelay[1] = *floatArr2;
+	SourceDelay[1] = *floatArr2;
 }
 
-int TLight::Message(int code, float value)
+int TLight::Message(MessageCode code, float value)
 {
 	int bmpIndex;
 
 	switch (code)
 	{
-	case 1024:
+	case MessageCode::Reset:
 		Reset();
 		for (auto index = 0; index < PinballTable->PlayerCount; ++index)
 		{
 			auto playerPtr = &PlayerData[index];
-			playerPtr->FlasherActive = FlasherActive;
-			playerPtr->BmpIndex2 = BmpIndex2;
-			playerPtr->BmpIndex1 = BmpIndex1;
+			playerPtr->FlasherOnFlag = FlasherOnFlag;
+			playerPtr->LightOnBmpIndex = LightOnBmpIndex;
+			playerPtr->LightOnFlag = LightOnFlag;
 			playerPtr->MessageField = MessageField;
 		}
 		break;
-	case 1020:
+	case MessageCode::PlayerChanged:
 		{
 			auto playerPtr = &PlayerData[PinballTable->CurrentPlayer];
-			playerPtr->FlasherActive = FlasherActive;
-			playerPtr->BmpIndex2 = BmpIndex2;
-			playerPtr->BmpIndex1 = BmpIndex1;
+			playerPtr->FlasherOnFlag = FlasherOnFlag;
+			playerPtr->LightOnBmpIndex = LightOnBmpIndex;
+			playerPtr->LightOnFlag = LightOnFlag;
 			playerPtr->MessageField = MessageField;
 
 			Reset();
 
 			playerPtr = &PlayerData[static_cast<int>(floor(value))];
-			FlasherActive = playerPtr->FlasherActive;
-			BmpIndex2 = playerPtr->BmpIndex2;
-			BmpIndex1 = playerPtr->BmpIndex1;
+			FlasherOnFlag = playerPtr->FlasherOnFlag;
+			LightOnBmpIndex = playerPtr->LightOnBmpIndex;
+			LightOnFlag = playerPtr->LightOnFlag;
 			MessageField = playerPtr->MessageField;
-			if (BmpIndex2)
+			if (LightOnBmpIndex)
 			{
-				Message(11, static_cast<float>(BmpIndex2));
+				Message(MessageCode::TLightSetOnStateBmpIndex, static_cast<float>(LightOnBmpIndex));
 			}
-			if (BmpIndex1)
-				Message(1, 0.0);
-			if (FlasherActive)
-				Message(4, 0.0);
+			if (LightOnFlag)
+				Message(MessageCode::TLightTurnOn, 0.0);
+			if (FlasherOnFlag)
+				Message(MessageCode::TLightFlasherStart, 0.0);
 			break;
 		}
-	case 0:
-		BmpIndex1 = 0;
-		if (FlasherActive == 0 && !FlasherFlag1 && !FlasherFlag2)
-			render::sprite_set_bitmap(RenderSprite, Flasher.BmpArr[0]);
+	case MessageCode::TLightTurnOff:
+		LightOnFlag = false;
+		if (!FlasherOnFlag && !ToggledOffFlag && !ToggledOnFlag)
+			SetSpriteBmp(BmpArr[0]);
 		break;
-	case 1:
-		BmpIndex1 = 1;
-		if (FlasherActive == 0 && !FlasherFlag1 && !FlasherFlag2)
-			render::sprite_set_bitmap(RenderSprite, Flasher.BmpArr[1]);
+	case MessageCode::TLightTurnOn:
+		LightOnFlag = true;
+		if (!FlasherOnFlag && !ToggledOffFlag && !ToggledOnFlag)
+			SetSpriteBmp(BmpArr[1]);
 		break;
-	case 2:
-		return BmpIndex1;
-	case 3:
-		return FlasherActive;
-	case 4:
+	case MessageCode::TLightGetLightOnFlag:
+		return LightOnFlag;
+	case MessageCode::TLightGetFlasherOnFlag:
+		return FlasherOnFlag;
+	case MessageCode::TLightFlasherStart:
 		schedule_timeout(0.0);
-		if (!FlasherActive || !Flasher.Timer)
+		if (!FlasherOnFlag || !FlashTimer)
 		{
-			FlasherActive = 1;
-			FlasherFlag2 = 0;
-			FlasherFlag1 = 0;
-			TurnOffAfterFlashingFg = 0;
-			flasher_start(&Flasher, BmpIndex1);
+			FlasherOnFlag = true;
+			ToggledOnFlag = false;
+			ToggledOffFlag = false;
+			TurnOffAfterFlashingFg = false;
+			flasher_start(LightOnFlag);
 		}
 		break;
-	case 5:
-		Flasher.TimerDelay[0] = value * FlasherDelay[0];
-		Flasher.TimerDelay[1] = value * FlasherDelay[1];
+	case MessageCode::TLightApplyMultDelay:
+		FlashDelay[0] = value * SourceDelay[0];
+		FlashDelay[1] = value * SourceDelay[1];
 		break;
-	case 6:
-		Flasher.TimerDelay[0] = FlasherDelay[0];
-		Flasher.TimerDelay[1] = FlasherDelay[1];
+	case MessageCode::TLightApplyDelay:
+		FlashDelay[0] = SourceDelay[0];
+		FlashDelay[1] = SourceDelay[1];
 		break;
-	case 7:
-		if (!FlasherActive)
-			flasher_start(&Flasher, BmpIndex1);
-		FlasherActive = 1;
-		FlasherFlag2 = 0;
-		TurnOffAfterFlashingFg = 0;
-		FlasherFlag1 = 0;
+	case MessageCode::TLightFlasherStartTimed:
+		if (!FlasherOnFlag)
+			flasher_start(LightOnFlag);
+		FlasherOnFlag = true;
+		ToggledOnFlag = false;
+		TurnOffAfterFlashingFg = false;
+		ToggledOffFlag = false;
 		schedule_timeout(value);
 		break;
-	case 8:
-		if (!FlasherFlag1)
+	case MessageCode::TLightTurnOffTimed:
+		if (!ToggledOffFlag)
 		{
-			if (FlasherActive)
+			if (FlasherOnFlag)
 			{
-				flasher_stop(&Flasher, 0);
-				FlasherActive = 0;
+				flasher_stop(0);
+				FlasherOnFlag = false;
 			}
 			else
 			{
-				render::sprite_set_bitmap(RenderSprite, Flasher.BmpArr[0]);
+				SetSpriteBmp(BmpArr[0]);
 			}
-			FlasherFlag1 = 1;
-			FlasherFlag2 = 0;
+			ToggledOffFlag = true;
+			ToggledOnFlag = false;
 		}
 		schedule_timeout(value);
 		break;
-	case 9:
-		if (!FlasherFlag2)
+	case MessageCode::TLightTurnOnTimed:
+		if (!ToggledOnFlag)
 		{
-			if (FlasherActive)
+			if (FlasherOnFlag)
 			{
-				flasher_stop(&Flasher, 1);
-				FlasherActive = 0;
+				flasher_stop(1);
+				FlasherOnFlag = false;
 			}
 			else
 			{
-				render::sprite_set_bitmap(RenderSprite, Flasher.BmpArr[1]);
+				SetSpriteBmp(BmpArr[1]);
 			}
-			FlasherFlag2 = 1;
-			FlasherFlag1 = 0;
+			ToggledOnFlag = true;
+			ToggledOffFlag = false;
 		}
 		schedule_timeout(value);
 		break;
-	case 11:
-		BmpIndex2 = static_cast<int>(floor(value));
-		if (BmpIndex2 > ListBitmap->GetCount())
-			BmpIndex2 = ListBitmap->GetCount();
-		bmpIndex = 0;
-		if (BmpIndex2 < 0)
-			BmpIndex2 = 0;
-		Flasher.BmpArr[0] = nullptr;
-		Flasher.BmpArr[1] = ListBitmap->Get(BmpIndex2);
-		if (FlasherActive == 0)
+	case MessageCode::TLightSetOnStateBmpIndex:
+		LightOnBmpIndex = Clamp(static_cast<int>(floor(value)), 0, static_cast<int>(ListBitmap->size()) - 1);
+		BmpArr[0] = -1;
+		BmpArr[1] = LightOnBmpIndex;
+		if (!FlasherOnFlag)
 		{
-			if (!FlasherFlag1)
-			{
-				if (FlasherFlag2)
-					bmpIndex = 1;
-				else
-					bmpIndex = BmpIndex1;
-			}
+			if (ToggledOffFlag)
+				bmpIndex = 0;
+			else if (ToggledOnFlag)
+				bmpIndex = 1;
+			else
+				bmpIndex = LightOnFlag;
 		}
 		else
 		{
-			bmpIndex = Flasher.BmpIndex;
+			bmpIndex = FlashLightOnFlag;
 		}
-		render::sprite_set_bitmap(RenderSprite, Flasher.BmpArr[bmpIndex]);
+		SetSpriteBmp(BmpArr[bmpIndex]);
 		break;
-	case 12:
-		bmpIndex = BmpIndex2 + 1;
-		if (bmpIndex > ListBitmap->GetCount())
-			bmpIndex = ListBitmap->GetCount();
-		Message(11, static_cast<float>(bmpIndex));
+	case MessageCode::TLightIncOnStateBmpIndex:
+		bmpIndex = LightOnBmpIndex + 1;
+		if (bmpIndex >= static_cast<int>(ListBitmap->size()))
+			bmpIndex = static_cast<int>(ListBitmap->size()) - 1;
+		Message(MessageCode::TLightSetOnStateBmpIndex, static_cast<float>(bmpIndex));
 		break;
-	case 13:
-		bmpIndex = BmpIndex2 - 1;
+	case MessageCode::TLightDecOnStateBmpIndex:
+		bmpIndex = LightOnBmpIndex - 1;
 		if (bmpIndex < 0)
 			bmpIndex = 0;
-		Message(11, static_cast<float>(bmpIndex));
+		Message(MessageCode::TLightSetOnStateBmpIndex, static_cast<float>(bmpIndex));
 		break;
-	case 14:
-		if (Timer1)
-			timer::kill(Timer1);
-		Timer1 = 0;
-		if (FlasherActive != 0)
-			flasher_stop(&Flasher, -1);
-		FlasherActive = 0;
-		FlasherFlag1 = 0;
-		FlasherFlag2 = 0;
-		render::sprite_set_bitmap(RenderSprite, Flasher.BmpArr[BmpIndex1]);
+	case MessageCode::TLightResetTimed:
+		if (TimeoutTimer)
+			timer::kill(TimeoutTimer);
+		TimeoutTimer = 0;
+		if (FlasherOnFlag)
+			flasher_stop(-1);
+		FlasherOnFlag = false;
+		ToggledOffFlag = false;
+		ToggledOnFlag = false;
+		SetSpriteBmp(BmpArr[LightOnFlag]);
 		break;
-	case 15:
-		TurnOffAfterFlashingFg = 0;
-		if (Timer2)
-			timer::kill(Timer2);
-		Timer2 = 0;
-		Message(1, 0.0);
-		Message(7, value);
+	case MessageCode::TLightFlasherStartTimedThenStayOn:
+		TurnOffAfterFlashingFg = false;
+		if (UndoOverrideTimer)
+			timer::kill(UndoOverrideTimer);
+		UndoOverrideTimer = 0;
+		Message(MessageCode::TLightTurnOn, 0.0);
+		Message(MessageCode::TLightFlasherStartTimed, value);
 		break;
-	case 16:
-		if (Timer2)
-			timer::kill(Timer2);
-		Timer2 = 0;
-		Message(7, value);
-		TurnOffAfterFlashingFg = 1;
+	case MessageCode::TLightFlasherStartTimedThenStayOff:
+		if (UndoOverrideTimer)
+			timer::kill(UndoOverrideTimer);
+		UndoOverrideTimer = 0;
+		Message(MessageCode::TLightFlasherStartTimed, value);
+		TurnOffAfterFlashingFg = true;
 		break;
-	case 17:
-		Message(static_cast<int>(floor(value)) != 0, 0.0);
-		return BmpIndex1;
-	case 18:
-		Message(17, value);
-		Message(14, 0.0);
-		return BmpIndex1;
-	case 19:
-		Message(1, 0.0);
-		Message(14, 0.0);
+	case MessageCode::TLightToggleValue:
+		Message(static_cast<int>(floor(value)) ? MessageCode::TLightTurnOn : MessageCode::TLightTurnOff, 0.0);
+		return LightOnFlag;
+	case MessageCode::TLightResetAndToggleValue:
+		Message(MessageCode::TLightToggleValue, value);
+		Message(MessageCode::TLightResetTimed, 0.0);
+		return LightOnFlag;
+	case MessageCode::TLightResetAndTurnOn:
+		Message(MessageCode::TLightTurnOn, 0.0);
+		Message(MessageCode::TLightResetTimed, 0.0);
 		break;
-	case 20:
-		Message(0, 0.0);
-		Message(14, 0.0);
+	case MessageCode::TLightResetAndTurnOff:
+		Message(MessageCode::TLightTurnOff, 0.0);
+		Message(MessageCode::TLightResetTimed, 0.0);
 		break;
-	case 21:
-		Message(17, static_cast<float>(BmpIndex1 == 0));
-		return BmpIndex1;
-	case 22:
-		Message(18, static_cast<float>(BmpIndex1 == 0));
-		return BmpIndex1;
-	case 23:
+	case MessageCode::TLightToggle:
+		Message(MessageCode::TLightToggleValue, !LightOnFlag);
+		return LightOnFlag;
+	case MessageCode::TLightResetAndToggle:
+		Message(MessageCode::TLightResetAndToggleValue, !LightOnFlag);
+		return LightOnFlag;
+	case MessageCode::TLightSetMessageField:
 		MessageField = static_cast<int>(floor(value));
+		break;
+	case MessageCode::TLightFtTmpOverrideOn:
+	case MessageCode::TLightFtTmpOverrideOff:
+		// FT codes in negative to avoid overlap with 3DPB TLightGroup codes
+		SpriteSet(BmpArr[code == MessageCode::TLightFtTmpOverrideOn]);
+		if (UndoOverrideTimer)
+			timer::kill(UndoOverrideTimer);
+		UndoOverrideTimer = 0;
+		if (value > 0)
+		{
+			TemporaryOverrideFlag = true;
+			UndoOverrideTimer = timer::set(value, this, UndoTmpOverride);
+		}
+		break;
+	case MessageCode::TLightFtResetOverride:
+		if (UndoOverrideTimer)
+			timer::kill(UndoOverrideTimer);
+		UndoOverrideTimer = 0;
+		TemporaryOverrideFlag = false;
+		SpriteSet(PreviousBitmap);
 		break;
 	default:
 		break;
@@ -238,85 +251,99 @@ int TLight::Message(int code, float value)
 
 void TLight::Reset()
 {
-	if (Timer1)
-		timer::kill(Timer1);
-	if (Timer2)
-		timer::kill(Timer2);
-	if (FlasherActive)
-		flasher_stop(&Flasher, -1);
-	Unknown20F = 1.0;
-	Timer1 = 0;
-	Timer2 = 0;
-	BmpIndex1 = 0;
-	BmpIndex2 = 0;
-	FlasherFlag1 = 0;
-	FlasherFlag2 = 0;
-	FlasherActive = 0;
-	TurnOffAfterFlashingFg = 0;
-	render::sprite_set_bitmap(RenderSprite, nullptr);
-	Flasher.Sprite = RenderSprite;
-	Flasher.BmpArr[0] = nullptr;
-	if (ListBitmap)
-		Flasher.BmpArr[1] = ListBitmap->Get(0);
-	Flasher.Unknown4 = 0;
-	Flasher.Unknown3 = 0;
+	if (TimeoutTimer)
+		timer::kill(TimeoutTimer);
+	if (UndoOverrideTimer)
+		timer::kill(UndoOverrideTimer);
+	if (FlasherOnFlag)
+		flasher_stop(-1);
+	TimeoutTimer = 0;
+	UndoOverrideTimer = 0;
+	LightOnFlag = false;
+	LightOnBmpIndex = 0;
+	ToggledOffFlag = false;
+	ToggledOnFlag = false;
+	FlasherOnFlag = false;
+	TemporaryOverrideFlag = false;
+	TurnOffAfterFlashingFg = false;
+	PreviousBitmap = -1;
+	BmpArr[0] = -1;
+	BmpArr[1] = 0;
+	SetSpriteBmp(BmpArr[0]);
 	MessageField = 0;
 }
 
 void TLight::schedule_timeout(float time)
 {
-	Flasher.TimerDelay[0] = FlasherDelay[0];
-	Flasher.TimerDelay[1] = FlasherDelay[1];
-	if (Timer1)
-		timer::kill(Timer1);
-	Timer1 = 0;
+	FlashDelay[0] = SourceDelay[0];
+	FlashDelay[1] = SourceDelay[1];
+	if (TimeoutTimer)
+		timer::kill(TimeoutTimer);
+	TimeoutTimer = 0;
 	if (time > 0.0f)
-		Timer1 = timer::set(time, this, TimerExpired);
+		TimeoutTimer = timer::set(time, this, TimerExpired);
 }
 
 void TLight::TimerExpired(int timerId, void* caller)
 {
 	auto light = static_cast<TLight*>(caller);
-	if (light->FlasherActive)
-		flasher_stop(&light->Flasher, -1);
-	render::sprite_set_bitmap(light->RenderSprite, light->Flasher.BmpArr[light->BmpIndex1]);
-	light->FlasherFlag1 = 0;
-	light->FlasherFlag2 = 0;
-	light->FlasherActive = 0;
-	light->Timer1 = 0;
-	if (light->TurnOffAfterFlashingFg != 0)
+	if (light->FlasherOnFlag)
+		light->flasher_stop(-1);
+	light->SetSpriteBmp(light->BmpArr[light->LightOnFlag]);
+	light->ToggledOffFlag = false;
+	light->ToggledOnFlag = false;
+	light->FlasherOnFlag = false;
+	light->TimeoutTimer = 0;
+	if (light->TurnOffAfterFlashingFg)
 	{
-		light->TurnOffAfterFlashingFg = 0;
-		light->Message(20, 0.0);
+		light->TurnOffAfterFlashingFg = false;
+		light->Message(MessageCode::TLightResetAndTurnOff, 0.0);
 	}
 	if (light->Control)
-		control::handler(60, light);
+		control::handler(MessageCode::ControlTimerExpired, light);
 }
 
 
-void TLight::flasher_stop(flasher_type* flash, int bmpIndex)
+void TLight::flasher_stop(int bmpIndex)
 {
-	if (flash->Timer)
-		timer::kill(flash->Timer);
-	flash->Timer = 0;
+	if (FlashTimer)
+		timer::kill(FlashTimer);
+	FlashTimer = 0;
 	if (bmpIndex >= 0)
 	{
-		flash->BmpIndex = bmpIndex;
-		render::sprite_set_bitmap(flash->Sprite, flash->BmpArr[bmpIndex]);
+		FlashLightOnFlag = bmpIndex;
+		SetSpriteBmp(BmpArr[FlashLightOnFlag]);
 	}
 }
 
-void TLight::flasher_start(flasher_type* flash, int bmpIndex)
+void TLight::flasher_start(bool bmpIndex)
 {
-	flash->BmpIndex = bmpIndex;
-	flasher_callback(0, flash);
+	FlashLightOnFlag = bmpIndex;
+	flasher_callback(0, this);
+}
+
+void TLight::SetSpriteBmp(int index)
+{
+	PreviousBitmap = index;
+	if (!TemporaryOverrideFlag)
+		SpriteSet(index);
 }
 
 void TLight::flasher_callback(int timerId, void* caller)
 {
-	auto flash = static_cast<flasher_type*>(caller);
-	auto index = 1 - flash->BmpIndex;
-	flash->BmpIndex = index;
-	render::sprite_set_bitmap(flash->Sprite, flash->BmpArr[index]);
-	flash->Timer = timer::set(flash->TimerDelay[flash->BmpIndex], flash, flasher_callback);
+	auto light = static_cast<TLight*>(caller);
+	light->FlashLightOnFlag ^= true;
+	light->SetSpriteBmp(light->BmpArr[light->FlashLightOnFlag]);
+	light->FlashTimer = timer::set(light->FlashDelay[light->FlashLightOnFlag], light, flasher_callback);
+}
+
+void TLight::UndoTmpOverride(int timerId, void* caller)
+{
+	auto light = static_cast<TLight*>(caller);
+	light->Message(MessageCode::TLightFtResetOverride, 0.0f);
+}
+
+bool TLight::light_on() const
+{
+	return LightOnFlag || ToggledOnFlag || FlasherOnFlag;
 }

@@ -1,9 +1,8 @@
 ﻿#include "pch.h"
 #include "loader.h"
-#include "memory.h"
 #include "GroupData.h"
+#include "TPinballComponent.h"
 #include "pb.h"
-#include "pinball.h"
 #include "Sound.h"
 #include "zdrv.h"
 
@@ -63,7 +62,7 @@ int loader::error(int errorCode, int captionCode)
 
 	if (!errorText)
 		errorText = loader_errors[index].Message;
-	SDL_ShowSimpleMessageBox(SDL_MESSAGEBOX_ERROR, errorCaption, errorText, nullptr);
+	pb::ShowMessageBox(SDL_MESSAGEBOX_ERROR, errorCaption, errorText);
 	return -1;
 }
 
@@ -76,8 +75,7 @@ void loader::default_vsi(visualStruct* visual)
 	visual->Elasticity = 0.60000002f;
 	visual->FloatArrCount = 0;
 	visual->SoftHitSoundId = 0;
-	visual->Bitmap = nullptr;
-	visual->ZMap = nullptr;
+	visual->Bitmap = { nullptr, nullptr };
 	visual->SoundIndex3 = 0;
 	visual->SoundIndex4 = 0;
 }
@@ -87,15 +85,14 @@ void loader::loadfrom(DatFile* datFile)
 	loader_table = datFile;
 	sound_record_table = loader_table;
 
-	for (auto groupIndex = 0; groupIndex < datFile->Groups.size(); ++groupIndex)
+	for (auto groupIndex = 0; groupIndex < static_cast<int>(datFile->Groups.size()); ++groupIndex)
 	{
 		auto value = reinterpret_cast<int16_t*>(datFile->field(groupIndex, FieldTypes::ShortValue));
 		if (value && *value == 202)
 		{
 			if (sound_count < 65)
 			{
-				sound_list[sound_count].WavePtr = nullptr;
-				sound_list[sound_count].GroupIndex = groupIndex;
+				sound_list[sound_count] = {nullptr, groupIndex, 0, 0};
 				sound_count++;
 			}
 		}
@@ -108,8 +105,7 @@ void loader::unload()
 	for (int index = 1; index < sound_count; ++index)
 	{
 		Sound::FreeSound(sound_list[index].WavePtr);
-		sound_list[index].Loaded = 0;
-		sound_list[index].WavePtr = nullptr;
+		sound_list[index] = {};
 	}
 
 	sound_count = 1;
@@ -140,34 +136,43 @@ int loader::get_sound_id(int groupIndex)
 
 		int soundGroupId = sound_list[soundIndex].GroupIndex;
 		sound_list[soundIndex].Duration = 0.0;
-		if (soundGroupId > 0 && !pinball::quickFlag)
+		if (soundGroupId > 0 && !pb::quickFlag)
 		{
 			auto value = reinterpret_cast<int16_t*>(loader_table->field(soundGroupId,
 			                                                            FieldTypes::ShortValue));
 			if (value && *value == 202)
 			{
+				// File name is in lower case, while game data is usually in upper case.
 				std::string fileName = loader_table->field(soundGroupId, FieldTypes::String);
-
-				// File name is in lower case, while game data is in upper case.				
-				std::transform(fileName.begin(), fileName.end(), fileName.begin(),
-				               [](unsigned char c) { return std::toupper(c); });
 				if (pb::FullTiltMode)
 				{
 					// FT sounds are in SOUND subfolder
 					fileName.insert(0, 1, PathSeparator);
-					fileName.insert(0, "SOUND");
+					fileName.insert(0, "sound");
 				}
 
-				auto filePath = pinball::make_path_name(fileName);
-				auto file = fopen(filePath.c_str(), "rb");
-				if (file)
+				std::string filePath;
+				float duration = -1;
+				for (int i = 0; i < 2; i++)
 				{
-					fread(&wavHeader, 1, sizeof wavHeader, file);
-					fclose(file);
+					if (i == 1)
+						std::transform(fileName.begin(), fileName.end(), fileName.begin(),
+						               [](unsigned char c) { return std::toupper(c); });
+
+					filePath = pb::make_path_name(fileName);
+					auto file = fopenu(filePath.c_str(), "rb");
+					if (file)
+					{
+						fread(&wavHeader, 1, sizeof wavHeader, file);
+						fclose(file);
+						auto sampleCount = wavHeader.data_size / (wavHeader.channels * (wavHeader.bits_per_sample /
+							8.0));
+						duration = static_cast<float>(sampleCount / wavHeader.sample_rate);
+						break;
+					}
 				}
 
-				auto sampleCount = wavHeader.data_size / (wavHeader.channels * (wavHeader.bits_per_sample / 8.0));
-				sound_list[soundIndex].Duration = static_cast<float>(sampleCount / wavHeader.sample_rate);
+				sound_list[soundIndex].Duration = duration;
 				sound_list[soundIndex].WavePtr = Sound::LoadWaveFile(filePath);
 			}
 		}
@@ -327,12 +332,11 @@ int loader::material(int groupIndex, visualStruct* visual)
 	return 0;
 }
 
-
-float loader::play_sound(int soundIndex)
+float loader::play_sound(int soundIndex, TPinballComponent *soundSource, const char *info)
 {
 	if (soundIndex <= 0)
 		return 0.0;
-	Sound::PlaySound(sound_list[soundIndex].WavePtr, 0, 7, 0, 0);
+	Sound::PlaySound(sound_list[soundIndex].WavePtr, pb::time_ticks, soundSource, info);
 	return sound_list[soundIndex].Duration;
 }
 
@@ -391,7 +395,7 @@ int loader::kicker(int groupIndex, visualKickerStruct* kicker)
 			kicker->ThrowBallMult = *floatArr;
 			break;
 		case 404:
-			kicker->ThrowBallAcceleration = *reinterpret_cast<vector_type*>(floatArr);
+			kicker->ThrowBallDirection = *reinterpret_cast<vector3*>(floatArr);
 			floatArr += 3;
 			index += 4;
 			break;
@@ -423,8 +427,9 @@ int loader::query_visual(int groupIndex, int groupIndexOffset, visualStruct* vis
 	if (stateId < 0)
 		return error(16, 18);
 
-	visual->Bitmap = loader_table->GetBitmap(stateId);
-	visual->ZMap = loader_table->GetZMap(stateId);
+	auto bmp = loader_table->GetBitmap(stateId);
+	auto zMap = loader_table->GetZMap(stateId);
+	visual->Bitmap = { bmp, zMap };
 
 	auto shortArr = reinterpret_cast<int16_t*>(loader_table->field(stateId, FieldTypes::ShortArray));
 	if (shortArr)

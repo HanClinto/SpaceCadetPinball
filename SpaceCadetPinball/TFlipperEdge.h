@@ -1,6 +1,7 @@
 #pragma once
 #include "maths.h"
 #include "TEdgeSegment.h"
+#include "TPinballComponent.h"
 
 class TPinballTable;
 
@@ -8,22 +9,20 @@ class TFlipperEdge : public TEdgeSegment
 {
 public:
 	TFlipperEdge(TCollisionComponent* collComp, char* activeFlag, unsigned int collisionGroup, TPinballTable* table,
-	             vector_type* origin, vector_type* vecT1, vector_type* vecT2, float bmpCoef1, float bmpCoef2, float collMult,
+	             vector3* origin, vector3* vecT1, vector3* vecT2, float extendSpeed, float retractSpeed, float collMult,
 	             float elasticity, float smoothness);
 	void port_draw() override;
-	float FindCollisionDistance(ray_type* ray) override;
-	void EdgeCollision(TBall* ball, float coef) override;
-	void place_in_grid() override;
-	void set_control_points(float timeNow);
-	void build_edges_in_motion();
-	float flipper_angle(float timeNow);
-	int is_ball_inside(float x, float y);
-	void SetMotion(int code, float value);
+	float FindCollisionDistance(const ray_type& ray) override;
+	void EdgeCollision(TBall* ball, float distance) override;
+	void place_in_grid(RectF* aabb) override;
+	void set_control_points(float angle);
+	float flipper_angle_delta(float timeDelta);
+	int SetMotion(MessageCode code);
 
-	int FlipperFlag;
+	MessageCode FlipperFlag{};
 	float Elasticity;
 	float Smoothness;
-	vector_type RotOrigin;
+	vector2 RotOrigin{};
 	float CirclebaseRadius;
 	float CircleT1Radius;
 	float CirclebaseRadiusSq;
@@ -31,31 +30,27 @@ public:
 	float CirclebaseRadiusMSq;
 	float CircleT1RadiusMSq;
 	float AngleMax;
-	float Angle2;
-	float Angle1;
-	int CollisionFlag1;
-	int CollisionFlag2;
-	vector_type CollisionLinePerp;
-	vector_type A1Src;
-	vector_type A2Src;
-	vector_type B1Src;
-	vector_type B2Src;
+	float AngleRemainder{};
+	float AngleDst;
+	float CurrentAngle{};
+	vector2 CollisionLinePerp{};
+	vector2 A1Src{};
+	vector2 A2Src{};
+	vector2 B1Src{};
+	vector2 B2Src{};
 	float CollisionMult;
-	vector_type T1Src;
-	vector_type T2Src;
-	float DistanceDivSq;
-	float CollisionTimeAdvance;
-	vector_type CollisionDirection;
-	int EdgeCollisionFlag;
-	float InputTime;
-	float AngleStopTime;
-	float AngleMult;
-	float BmpCoef1;
-	float BmpCoef2;
-	vector_type NextBallPosition;
-
-	static float flipper_sin_angle, flipper_cos_angle;
-	static vector_type A1, A2, B1, B2, T1;
-	static line_type lineA, lineB;
-	static circle_type circlebase, circleT1;
+	vector2 T1Src{};
+	vector2 T2Src{};
+	float DistanceDiv, DistanceDivSq;
+	vector2 CollisionDirection{};
+	float ExtendSpeed;
+	float RetractSpeed;
+	float MoveSpeed;
+	vector2 NextBallPosition{};
+	vector2 A1, A2, B1, B2, T1;
+	line_type LineA, LineB;
+	circle_type circlebase, circleT1;
+	float InvT1Radius;
+	float YMin, YMax, XMin, XMax;
+	bool ControlPointDirtyFlag{};
 };

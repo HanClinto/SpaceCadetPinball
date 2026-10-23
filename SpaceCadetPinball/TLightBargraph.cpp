@@ -4,8 +4,6 @@
 
 #include "control.h"
 #include "loader.h"
-#include "memory.h"
-#include "objlist_class.h"
 #include "timer.h"
 #include "TPinballTable.h"
 
@@ -18,11 +16,11 @@ TLightBargraph::TLightBargraph(TPinballTable* table, int groupIndex) : TLightGro
 		float* floatArr = loader::query_float_attribute(groupIndex, 0, 904);
 		if (floatArr)
 		{
-			int count = 2 * List->GetCount();
-			TimerTimeArray = memory::allocate<float>(count);
+			auto count = 2 * List.size();
+			TimerTimeArray = new float[count];
 			if (TimerTimeArray)
 			{
-				for (int i = 0; i < count; ++floatArr)
+				for (auto i = 0u; i < count; ++floatArr)
 					TimerTimeArray[i++] = *floatArr;
 			}
 		}
@@ -31,17 +29,16 @@ TLightBargraph::TLightBargraph(TPinballTable* table, int groupIndex) : TLightGro
 
 TLightBargraph::~TLightBargraph()
 {
-	if (TimerTimeArray)
-		memory::free(TimerTimeArray);
+	delete[] TimerTimeArray;
 }
 
-int TLightBargraph::Message(int code, float value)
+int TLightBargraph::Message(MessageCode code, float value)
 {
 	switch (code)
 	{
-	case 37:
+	case MessageCode::TLightGroupGetOnCount:
 		return TimeIndex;
-	case 45:
+	case MessageCode::TLightGroupToggleSplitIndex:
 		{
 			if (TimerBargraph)
 			{
@@ -49,30 +46,29 @@ int TLightBargraph::Message(int code, float value)
 				TimerBargraph = 0;
 			}
 			auto timeIndex = static_cast<int>(floor(value));
-			auto maxCount = 2 * List->GetCount();
+			auto maxCount = static_cast<int>(List.size()) * 2;
 			if (timeIndex >= maxCount)
 				timeIndex = maxCount - 1;
 			if (timeIndex >= 0)
 			{
-				TLightGroup::Message(45, static_cast<float>(timeIndex / 2));
+				TLightGroup::Message(MessageCode::TLightGroupToggleSplitIndex, static_cast<float>(timeIndex / 2));
 				if (!(timeIndex & 1))
-					TLightGroup::Message(46, 0.0);
-				float* timeArray = TimerTimeArray;
-				if (timeArray)
-					TimerBargraph = timer::set(timeArray[timeIndex], this, BargraphTimerExpired);
+					TLightGroup::Message(MessageCode::TLightGroupStartFlasher, 0.0);
+				if (TimerTimeArray)
+					TimerBargraph = timer::set(TimerTimeArray[timeIndex], this, BargraphTimerExpired);
 				TimeIndex = timeIndex;
 			}
 			else
 			{
-				TLightGroup::Message(20, 0.0);
+				TLightGroup::Message(MessageCode::TLightResetAndTurnOff, 0.0);
 				TimeIndex = 0;
 			}
 			break;
 		}
-	case 1011:
+	case MessageCode::SetTiltLock:
 		Reset();
 		break;
-	case 1020:
+	case MessageCode::PlayerChanged:
 		if (TimerBargraph)
 		{
 			timer::kill(TimerBargraph);
@@ -83,10 +79,10 @@ int TLightBargraph::Message(int code, float value)
 		TimeIndex = PlayerTimerIndexBackup[static_cast<int>(floor(value))];
 		if (TimeIndex)
 		{
-			TLightBargraph::Message(45, static_cast<float>(TimeIndex));
+			TLightBargraph::Message(MessageCode::TLightGroupToggleSplitIndex, static_cast<float>(TimeIndex));
 		}
 		break;
-	case 1024:
+	case MessageCode::Reset:
 		{
 			Reset();
 			int* playerPtr = PlayerTimerIndexBackup;
@@ -96,7 +92,7 @@ int TLightBargraph::Message(int code, float value)
 
 				++playerPtr;
 			}
-			TLightGroup::Message(1024, value);
+			TLightGroup::Message(MessageCode::Reset, value);
 			break;
 		}
 	default:
@@ -123,12 +119,12 @@ void TLightBargraph::BargraphTimerExpired(int timerId, void* caller)
 	bar->TimerBargraph = 0;
 	if (bar->TimeIndex)
 	{
-		bar->Message(45, static_cast<float>(bar->TimeIndex - 1));
-		control::handler(60, bar);
+		bar->Message(MessageCode::TLightGroupToggleSplitIndex, static_cast<float>(bar->TimeIndex - 1));
+		control::handler(MessageCode::ControlTimerExpired, bar);
 	}
 	else
 	{
-		bar->Message(20, 0.0);
-		control::handler(47, bar);
+		bar->Message(MessageCode::TLightResetAndTurnOff, 0.0);
+		control::handler(MessageCode::TLightGroupCountdownEnded, bar);
 	}
 }

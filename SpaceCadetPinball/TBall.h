@@ -1,37 +1,41 @@
 #pragma once
 #include "maths.h"
-#include "TPinballComponent.h"
+#include "TCollisionComponent.h"
+#include "TEdgeSegment.h"
 
-class TCollisionComponent;
-class TEdgeSegment;
-
-class TBall : public TPinballComponent
+class TBall : public TCollisionComponent, public TEdgeSegment
 {
 public :
-	TBall(TPinballTable* table);
+	TBall(TPinballTable* table, int groupIndex);
 	void Repaint();
 	void not_again(TEdgeSegment* edge);
-	bool already_hit(TEdgeSegment* edge);
-	int Message(int code, float value) override;
+	bool already_hit(const TEdgeSegment& edge) const;
+	int Message(MessageCode code, float value) override;
+	vector2 get_coordinates() override;
+	void Disable();
+	void throw_ball(vector3* direction, float angleMult, float speedMult1, float speedMult2);
+	void place_in_grid(RectF* aabb) override {}
+	void EdgeCollision(TBall* ball, float distance) override;
+	float FindCollisionDistance(const ray_type& ray) override;
 
-	static void throw_ball(TBall* ball, struct vector_type* acceleration, float angleMult, float speedMult1,
-	                       float speedMult2);
-
-	vector_type Position;
-	vector_type Acceleration;
+	vector3 Position{};
+	vector3 PrevPosition{};
+	vector3 Direction{};
 	float Speed;
 	float RayMaxDistance;
 	float TimeDelta;
-	float TimeNow;
-	vector_type InvAcceleration;
-	vector_type RampFieldForce;	
+	vector2 RampFieldForce{};
 	TCollisionComponent* CollisionComp;
-	int FieldFlag;
-	TEdgeSegment* Collisions[5];
+	int CollisionMask;
+	TEdgeSegment* Collisions[16]{};
 	int EdgeCollisionCount;
-	vector_type CollisionOffset;
+	bool EdgeCollisionResetFlag{};
+	vector3 CollisionOffset{};
 	int CollisionFlag;
-	float Offset;
-	int Unknown29;
-	float VisualZArray[50];
+	float Radius;
+	bool HasGroupFlag;
+	int StuckCounter = 0;
+	int LastActiveTime{};
+	float VisualZArray[50]{};
+	bool CollisionDisabledFlag{};
 };

@@ -4,7 +4,6 @@
 
 #include "control.h"
 #include "loader.h"
-#include "objlist_class.h"
 #include "pb.h"
 #include "TBall.h"
 #include "timer.h"
@@ -19,7 +18,7 @@ THole::THole(TPinballTable* table, int groupIndex) : TCollisionComponent(table, 
 	Unknown4 = 0.050000001f;
 	MessageField = 0;
 	Timer = 0;
-	BallCapturedFlag = 0;
+	BallCapturedFlag = false;
 	Unknown3 = loader::query_float_attribute(groupIndex, 0, 407, 0.25f);
 	GravityMult = loader::query_float_attribute(groupIndex, 0, 701, 0.2f);
 	GravityPull = *loader::query_float_attribute(groupIndex, 0, 305);
@@ -32,89 +31,92 @@ THole::THole(TPinballTable* table, int groupIndex) : TCollisionComponent(table, 
 		Circle.RadiusSq = 0.001f;
 
 	auto tCircle = new TCircle(this, &ActiveFlag, visual.CollisionGroup,
-	                           reinterpret_cast<vector_type*>(visual.FloatArr),
+	                           reinterpret_cast<vector3*>(visual.FloatArr),
 	                           Circle.RadiusSq);
-	if (tCircle)
-	{
-		tCircle->place_in_grid();
-		EdgeList->Add(tCircle);
-	}
+	tCircle->place_in_grid(&AABB);
+	EdgeList.push_back(tCircle);
 
 	ZSetValue = loader::query_float_attribute(groupIndex, 0, 408)[2];
-	FieldFlag = static_cast<int>(floor(*loader::query_float_attribute(groupIndex, 0, 1304)));
+	CollisionMask = static_cast<int>(floor(*loader::query_float_attribute(groupIndex, 0, 1304)));
 
-	/*Full tilt hack - FieldFlag should be on*/
+	// CollisionMask difference: 3DPB - value given as is, FT: mask = 1 << value
 	if (pb::FullTiltMode)
-		FieldFlag = 1;
+		CollisionMask = 1 << CollisionMask;
 
 	Circle.RadiusSq = visual.FloatArr[2] * visual.FloatArr[2];
 	circle.RadiusSq = Circle.RadiusSq;
 	circle.Center.X = Circle.Center.X;
 	circle.Center.Y = Circle.Center.Y;
-	circle.Center.Z = Circle.Center.Z;
 
-	Field.Flag2Ptr = &ActiveFlag;
+	Field.ActiveFlag = &ActiveFlag;
 	Field.CollisionComp = this;
-	Field.Mask = visual.CollisionGroup;
+	Field.CollisionGroup = visual.CollisionGroup;
 	TTableLayer::edges_insert_circle(&circle, nullptr, &Field);
 }
 
-int THole::Message(int code, float value)
+int THole::Message(MessageCode code, float value)
 {
-	if (code == 1024 && BallCapturedFlag)
+	if (code == MessageCode::Reset && BallCapturedFlag)
 	{
 		if (Timer)
 			timer::kill(Timer);
 		Timer = 0;
-		BallCapturedSecondStage = 1;
+		BallCapturedSecondStage = true;
 	}
 	return 0;
 }
 
-void THole::Collision(TBall* ball, vector_type* nextPosition, vector_type* direction, float coef, TEdgeSegment* edge)
+void THole::Collision(TBall* ball, vector2* nextPosition, vector2* direction, float distance, TEdgeSegment* edge)
 {
 	if (!BallCapturedFlag)
 	{
-		BallCapturedSecondStage = 0;
-		Threshold = 1000000000.0;
-		BallCapturedFlag = 1;
+		BallCapturedSecondStage = false;
+		Threshold = 1e9f;
+		BallCapturedFlag = true;
 		ball->CollisionComp = this;
 		ball->Position.X = Circle.Center.X;
 		ball->Position.Y = Circle.Center.Y;
-		ball->Acceleration.Z = 0.0;
-		Timer = timer::set(0.5f, this, TimerExpired);
+		ball->Direction.Z = 0.0;
+		ball->CollisionDisabledFlag = true;
+
+		// Ramp hole has no delay in FT.
+		auto captureTime = pb::FullTiltMode ? 0 : 0.5f;
+		Timer = timer::set(captureTime, this, TimerExpired);
+
 		if (!PinballTable->TiltLockFlag)
 		{
-			loader::play_sound(HardHitSoundId);
-			control::handler(57, this);
+			loader::play_sound(HardHitSoundId, ball, "THole1");
+			control::handler(MessageCode::ControlBallCaptured, this);
 		}
+	}
+	else
+	{
+		DefaultCollision(ball, nextPosition, direction);
 	}
 }
 
-int THole::FieldEffect(TBall* ball, vector_type* vecDst)
+int THole::FieldEffect(TBall* ball, vector2* vecDst)
 {
 	int result;
-	vector_type direction{};
+	vector2 direction{};
 
 	if (BallCapturedFlag)
 	{
 		if (BallCapturedSecondStage)
 		{
-			ball->Acceleration.Z -= PinballTable->GravityDirVectMult * ball->TimeDelta * GravityMult;
-			ball->Position.Z += ball->Acceleration.Z;
+			ball->Direction.Z -= PinballTable->GravityDirVectMult * ball->TimeDelta * GravityMult;
+			ball->Position.Z += ball->Direction.Z;
 			if (ball->Position.Z <= ZSetValue)
 			{
-				BallCapturedFlag = 0;
-				BallCapturedSecondStage = 0;
+				BallCapturedFlag = false;
+				BallCapturedSecondStage = false;
 				ball->Position.Z = ZSetValue;
-				ball->Acceleration.Z = 0.0;
-				ball->FieldFlag = FieldFlag;
-				ball->Acceleration.Y = 0.0;
+				ball->CollisionMask = CollisionMask;
 				ball->CollisionComp = nullptr;
-				ball->Acceleration.X = 0.0;
-				ball->Speed = 0.0;
-				loader::play_sound(SoftHitSoundId);
-				control::handler(58, this);
+				ball->Direction = {};
+				ball->Speed = 0.0f;
+				loader::play_sound(SoftHitSoundId, ball, "THole2");
+				control::handler(MessageCode::ControlBallReleased, this);
 			}
 		}
 		result = 0;
@@ -125,9 +127,9 @@ int THole::FieldEffect(TBall* ball, vector_type* vecDst)
 		direction.Y = Circle.Center.Y - ball->Position.Y;
 		if (direction.X * direction.X + direction.Y * direction.Y <= Circle.RadiusSq)
 		{
-			maths::normalize_2d(&direction);
-			vecDst->X = direction.X * GravityPull - ball->Acceleration.X * ball->Speed;
-			vecDst->Y = direction.Y * GravityPull - ball->Acceleration.Y * ball->Speed;
+			maths::normalize_2d(direction);
+			vecDst->X = direction.X * GravityPull - ball->Direction.X * ball->Speed;
+			vecDst->Y = direction.Y * GravityPull - ball->Direction.Y * ball->Speed;
 			result = 1;
 		}
 		else
@@ -142,5 +144,5 @@ void THole::TimerExpired(int timerId, void* caller)
 {
 	auto hole = static_cast<THole*>(caller);
 	hole->Timer = 0;
-	hole->BallCapturedSecondStage = 1;
+	hole->BallCapturedSecondStage = true;
 }

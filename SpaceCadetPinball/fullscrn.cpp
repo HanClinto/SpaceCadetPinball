@@ -59,10 +59,11 @@ int fullscrn::enableFullscreen()
 {
 	if (!display_changed)
 	{
-		SDL_SetWindowFullscreen(winmain::MainWindow, SDL_WINDOW_FULLSCREEN_DESKTOP);
-		display_changed = 1;
-		if (display_changed)
+		if (SDL_SetWindowFullscreen(winmain::MainWindow, SDL_WINDOW_FULLSCREEN_DESKTOP) == 0)
+		{
+			display_changed = 1;
 			return 1;
+		}
 	}
 	return 0;
 }
@@ -71,8 +72,8 @@ int fullscrn::disableFullscreen()
 {
 	if (display_changed)
 	{
-		SDL_SetWindowFullscreen(winmain::MainWindow, 0);
-		display_changed = 0;
+		if (SDL_SetWindowFullscreen(winmain::MainWindow, 0) == 0)
+			display_changed = 0;
 	}
 
 	return 0;
@@ -96,7 +97,7 @@ int fullscrn::GetResolution()
 
 void fullscrn::SetResolution(int value)
 {
-	if (!pb::FullTiltMode)
+	if (!pb::FullTiltMode || pb::FullTiltDemoMode)
 		value = 0;
 	assertm(value >= 0 && value <= 2, "Resolution value out of bounds");
 	resolution = value;
@@ -104,28 +105,58 @@ void fullscrn::SetResolution(int value)
 
 int fullscrn::GetMaxResolution()
 {
-	return pb::FullTiltMode ? 2 : 0;
+	return pb::FullTiltMode && !pb::FullTiltDemoMode ? 2 : 0;
 }
 
 void fullscrn::window_size_changed()
 {
 	int width, height;
 	SDL_GetRendererOutputSize(winmain::Renderer, &width, &height);
+	int menuHeight = options::Options.ShowMenu ? winmain::MainMenuHeight : 0;
+	height -= menuHeight;
 	auto res = &resolution_array[resolution];
 	ScaleX = static_cast<float>(width) / res->TableWidth;
 	ScaleY = static_cast<float>(height) / res->TableHeight;
 	OffsetX = OffsetY = 0;
+	auto offset2X = 0, offset2Y = 0;
+
+	if (options::Options.IntegerScaling)
+	{
+		ScaleX = ScaleX < 1 ? ScaleX : std::floor(ScaleX);
+		ScaleY = ScaleY < 1 ? ScaleY : std::floor(ScaleY);
+	}
 
 	if (options::Options.UniformScaling)
 	{
 		ScaleY = ScaleX = std::min(ScaleX, ScaleY);
-		OffsetX = static_cast<int>(floor((width - res->TableWidth * ScaleX) / 2));
-		OffsetY = static_cast<int>(floor((height - res->TableHeight * ScaleY) / 2));
 	}
+
+	offset2X = static_cast<int>(floor(width - res->TableWidth * ScaleX));
+	offset2Y = static_cast<int>(floor(height - res->TableHeight * ScaleY));
+	OffsetX = offset2X / 2;
+	OffsetY = offset2Y / 2;
 
 	render::DestinationRect = SDL_Rect
 	{
-		OffsetX, OffsetY,
-		width - OffsetX * 2, height - OffsetY * 2
+		OffsetX, OffsetY + menuHeight,
+		width - offset2X, height - offset2Y
 	};
+}
+
+SDL_Rect fullscrn::GetScreenRectFromPinballRect(SDL_Rect rect)
+{
+	SDL_Rect converted_rect;
+
+	converted_rect.x = rect.x * render::DestinationRect.w / render::vscreen->Width + render::DestinationRect.x;
+	converted_rect.y = rect.y * render::DestinationRect.h / render::vscreen->Height + render::DestinationRect.y;
+
+	converted_rect.w = rect.w * render::DestinationRect.w / render::vscreen->Width;
+	converted_rect.h = rect.h * render::DestinationRect.h / render::vscreen->Height;
+
+	return converted_rect;
+}
+
+float fullscrn::GetScreenToPinballRatio()
+{
+	return (float) render::DestinationRect.w / render::vscreen->Width;
 }
