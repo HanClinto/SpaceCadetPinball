@@ -71,6 +71,78 @@
             width: min(240px, 60vw);
         }
 
+        /* Asking for the game's files, when the build doesn't include them */
+        #files {
+            display: none;
+            max-width: 440px;
+            padding: 20px;
+            text-align: center;
+            color: var(--text);
+        }
+
+        #files.open {
+            display: block;
+        }
+
+        .asking #status-text,
+        .asking #status progress,
+        .asking #corner {
+            display: none;
+        }
+
+        #files h1 {
+            font-size: 20px;
+            margin: 0 0 10px;
+        }
+
+        #files p {
+            color: var(--muted);
+            margin: 0 0 12px;
+        }
+
+        #files code {
+            color: var(--text);
+            word-break: break-all;
+        }
+
+        #files .choose {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+            justify-content: center;
+            margin: 14px 0;
+        }
+
+        #files label {
+            display: inline-flex;
+            align-items: center;
+            padding: 0 16px;
+            height: 44px;
+            border-radius: 10px;
+            background: var(--accent);
+            color: #fff;
+            font-weight: 600;
+            cursor: pointer;
+        }
+
+        #files label.secondary {
+            background: var(--button);
+            color: var(--text);
+            font-weight: 400;
+        }
+
+        #files input {
+            display: none;
+        }
+
+        #files .error {
+            color: #ff8f8f;
+        }
+
+        #files a {
+            color: #8fb0ff;
+        }
+
         /* Touch controls */
         #bar {
             display: none;
@@ -175,7 +247,22 @@
     <div id="app">
         <div id="stage">
             <canvas id="canvas" oncontextmenu="event.preventDefault()" tabindex="-1"></canvas>
-            <div id="status"><span id="status-text">Downloading...</span><progress id="progress" hidden></progress></div>
+            <div id="status"><span id="status-text">Downloading...</span><progress id="progress" hidden></progress>
+                <div id="files" data-control>
+                    <h1>3D Pinball for Windows - Space Cadet</h1>
+                    <p>This page doesn't include the game's own files (the table, sounds and music), which belong to
+                        Microsoft. Copy them from a Windows XP computer, where they're in
+                        <code>C:\Program Files\Windows NT\Pinball</code>, or from a Full Tilt! Pinball CD, and choose
+                        them here. They stay in this browser.</p>
+                    <div class="choose">
+                        <label>Choose the folder<input type="file" id="files-folder" webkitdirectory multiple></label>
+                        <label class="secondary">Choose files or a .zip<input type="file" id="files-pick" multiple></label>
+                    </div>
+                    <p class="small">Or drop them on this page.</p>
+                    <p class="error" id="files-error"></p>
+                    <p><a href="https://github.com/HanClinto/SpaceCadetPinball">About this version</a></p>
+                </div>
+            </div>
             <div id="corner">
                 <button type="button" data-control id="corner-scores">High scores</button>
                 <button type="button" data-control id="corner-fullscreen">Full screen</button>
@@ -198,6 +285,7 @@
             <button type="button" data-action="shake" class="touch-only">Shake to nudge: on</button>
             <button type="button" data-action="fullscreen">Full screen</button>
             <button type="button" data-action="game-menu">Game menu (options, controls) on/off</button>
+            <button type="button" data-action="forget-files" hidden>Use different game files</button>
             <button type="button" data-action="close">Close</button>
             <div class="hint touch-only">Left or right half of the screen: flippers. Hold Launch to pull the
                 plunger, let go to launch. Give the phone a sharp jolt to nudge the table (too many and it tilts!).</div>
@@ -280,9 +368,105 @@
             Module.addRunDependency('settings');
             FS.syncfs(true, function (err) {
                 if (err) console.warn('Could not load settings', err);
+                if (!hasGameData()) askForGameData();
                 Module.removeRunDependency('settings');
             });
         });
+
+        // Game data. A build may include it (game_resources/); otherwise the player provides their own copy,
+        // which is kept with the settings in IndexedDB, in SDL's pref path, where the game also looks for it.
+        var userData = '/libsdl/SpaceCadetPinball/';
+        var dataFiles = ['PINBALL.DAT', 'CADET.DAT', 'DEMO.DAT'];
+        function exists(path) { return Module.FS.analyzePath(path).exists; }
+        function hasDataIn(dir) {
+            return dataFiles.some(function (f) { return exists(dir + f) || exists(dir + f.toLowerCase()); });
+        }
+        function hasGameData() {
+            if (hasDataIn('/game_resources/')) return true;
+            var mine = hasDataIn(userData);
+            if (mine) document.querySelector('[data-action="forget-files"]').hidden = false;
+            return mine;
+        }
+
+        function askForGameData() {
+            Module.addRunDependency('gamedata');
+            app.classList.add('asking');
+            document.getElementById('files').classList.add('open');
+            var error = document.getElementById('files-error');
+            function take(fileList) {
+                error.textContent = 'Reading...';
+                readGameFiles(Array.prototype.slice.call(fileList)).then(function (found) {
+                    if (!found.some(function (f) { return /\.DAT$/.test(f.name) && dataFiles.indexOf(f.name.split('/').pop()) >= 0; })) {
+                        error.textContent = 'No PINBALL.DAT or CADET.DAT there. Choose the folder the game is in.';
+                        return;
+                    }
+                    storeGameFiles(found);
+                    error.textContent = '';
+                    document.getElementById('files').classList.remove('open');
+                    app.classList.remove('asking');
+                    Module.FS.syncfs(false, function () { Module.removeRunDependency('gamedata'); });
+                }).catch(function (e) { error.textContent = 'Could not read those files: ' + e.message; });
+            }
+            document.getElementById('files-folder').addEventListener('change', function (e) { take(e.target.files); });
+            document.getElementById('files-pick').addEventListener('change', function (e) { take(e.target.files); });
+            addEventListener('dragover', function (e) { e.preventDefault(); });
+            addEventListener('drop', function (e) {
+                e.preventDefault();
+                if (!running) take(e.dataTransfer.files);
+            });
+        }
+
+        // The game's files from what was chosen: loose files, a folder, or .zip files. Names are upper case, as the
+        // game asks for them; sounds stay in SOUND/ when they were in one (Full Tilt keeps its sounds there).
+        var wanted = /\.(DAT|WAV|MID|MDS|BIN|INF|BMP)$/;
+        function readGameFiles(files) {
+            return Promise.all(files.map(function (file) {
+                var path = (file.webkitRelativePath || file.name).toUpperCase();
+                if (/\.ZIP$/.test(path)) return file.arrayBuffer().then(unzip);
+                if (!wanted.test(path)) return [];
+                return file.arrayBuffer().then(function (buf) { return [{ name: path, data: new Uint8Array(buf) }]; });
+            })).then(function (lists) {
+                var found = [].concat.apply([], lists).filter(function (f) { return wanted.test(f.name); });
+                var fullTiltOnly = found.some(function (f) { return /(^|\/)CADET\.DAT$/.test(f.name); }) &&
+                    !found.some(function (f) { return /(^|\/)PINBALL\.DAT$/.test(f.name); });
+                return found.map(function (f) {
+                    var parts = f.name.split('/'), base = parts.pop(), dir = parts.pop();
+                    var inSound = dir === 'SOUND' || (fullTiltOnly && !dir && /\.(WAV|MDS)$/.test(base));
+                    return { name: (inSound ? 'SOUND/' : '') + base, data: f.data };
+                });
+            });
+        }
+        function storeGameFiles(found) {
+            var FS = Module.FS;
+            FS.mkdirTree(userData + 'SOUND');
+            found.forEach(function (f) { FS.writeFile(userData + f.name, f.data); });
+        }
+
+        // A small .zip reader: stored and deflated entries, through the browser's DecompressionStream
+        function unzip(buffer) {
+            var view = new DataView(buffer), bytes = new Uint8Array(buffer);
+            var eocd = -1;
+            for (var i = bytes.length - 22; i >= Math.max(0, bytes.length - 65557); i--)
+                if (view.getUint32(i, true) === 0x06054b50) { eocd = i; break; }
+            if (eocd < 0) return Promise.reject(new Error('not a zip file'));
+            var count = view.getUint16(eocd + 10, true), p = view.getUint32(eocd + 16, true), entries = [];
+            for (var n = 0; n < count; n++) {
+                var method = view.getUint16(p + 10, true), size = view.getUint32(p + 20, true);
+                var nameLen = view.getUint16(p + 28, true), extraLen = view.getUint16(p + 30, true);
+                var commentLen = view.getUint16(p + 32, true), local = view.getUint32(p + 42, true);
+                var name = new TextDecoder().decode(bytes.subarray(p + 46, p + 46 + nameLen)).replace(/\\/g, '/').toUpperCase();
+                p += 46 + nameLen + extraLen + commentLen;
+                if (!wanted.test(name)) continue;
+                var start = local + 30 + view.getUint16(local + 26, true) + view.getUint16(local + 28, true);
+                entries.push({ name: name, method: method, data: bytes.subarray(start, start + size) });
+            }
+            return Promise.all(entries.map(function (e) {
+                if (e.method === 0) return { name: e.name, data: e.data };
+                if (e.method !== 8) throw new Error(e.name + ' is compressed in a way this page can\'t read');
+                var stream = new Blob([e.data]).stream().pipeThrough(new DecompressionStream('deflate-raw'));
+                return new Response(stream).arrayBuffer().then(function (buf) { return { name: e.name, data: new Uint8Array(buf) }; });
+            }));
+        }
         var saving = null;
         Module.syncSettings = function () {
             if (!running) return Promise.resolve();
@@ -477,6 +661,20 @@
                 var hidden = store('menuHidden') !== 'no';
                 store('menuHidden', hidden ? 'no' : 'yes');
                 call('web_show_menu', [hidden ? 1 : 0]);
+            }
+            else if (action === 'forget-files') {
+                if (!confirm('Remove the game files from this browser and choose others?')) return;
+                var FS = Module.FS;
+                (function remove(dir) {
+                    FS.readdir(dir).forEach(function (name) {
+                        if (name === '.' || name === '..') return;
+                        var path = dir + name;
+                        if (FS.isDir(FS.stat(path).mode)) { remove(path + '/'); FS.rmdir(path); }
+                        else if (wanted.test(name.toUpperCase())) FS.unlink(path);
+                    });
+                })(userData);
+                FS.syncfs(false, function () { location.reload(); });
+                return;
             }
             else if (action === 'shake') {
                 shakeOn = !shakeOn;

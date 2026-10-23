@@ -159,19 +159,13 @@ void fullscrn::LayoutPortrait(int width, int height, int menuHeight)
 	auto vW = render::vscreen->Width, vH = render::vscreen->Height;
 	auto boardW = pb::MainTable->Width, sideW = vW - boardW;
 
+	// The sidebar is a tall logo panel over the score panels. Side by side they fit under the board.
+	// Where the logo panel ends, measured at 3DPB's 416 and FT's 666 lines (the same at FT's other sizes).
+	auto split = pb::FullTiltMode ? vH * 324 / 666 : vH * 184 / 416;
 	Regions.clear();
 	Regions.push_back({{0, 0, boardW, vH}, {}});
-	if (pb::FullTiltMode)
-	{
-		Regions.push_back({{boardW, 0, sideW, vH}, {}});
-	}
-	else
-	{
-		// 3DPB's sidebar is a tall logo panel over the score panels. Side by side they fit under the board.
-		auto split = vH * 184 / 416;
-		Regions.push_back({{boardW, 0, sideW, split}, {}});
-		Regions.push_back({{boardW, split, sideW, vH - split}, {}});
-	}
+	Regions.push_back({{boardW, 0, sideW, split}, {}});
+	Regions.push_back({{boardW, split, sideW, vH - split}, {}});
 
 	int rowW = 0, rowH = 0;
 	for (auto i = 1u; i < Regions.size(); i++)

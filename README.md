@@ -13,6 +13,8 @@ Supports data files from Windows and Full Tilt versions of the game.
 
 ## Web version (this fork)
 
+**Play it: <https://hanclinto.github.io/SpaceCadetPinball/>** (bring your own game files, see below)
+
 This fork is the [Emscripten port by alula](https://github.com/alula/SpaceCadetPinball) brought up to upstream v2.1,
 with play on phones and a hook for sharing high scores:
 
@@ -23,6 +25,11 @@ with play on phones and a hook for sharing high scores:
 - **Smooth on any screen**: the game updates at a fixed rate (120 per second, as on the desktop) and draws once
   per browser frame, on 60 Hz and 120 Hz screens alike.
 - **Settings persist** in the browser (IndexedDB).
+- **Your own game files**: a build without them (like the one on GitHub Pages) asks for them once: the folder, the
+  files, or a .zip, from Windows XP (`C:\Program Files\Windows NT\Pinball`) or Full Tilt! Pinball (the Space Cadet
+  table's folder, `CADET.DAT` and its `SOUND` folder). They stay in the browser. Full Tilt's data gives the Full Tilt
+  edition of the table: higher resolution art, multiball, three music tracks. The game's files belong to Microsoft
+  and Maxis and aren't part of this repository or its web page.
 - **Shared high scores** (optional): a page can set `Module.scoreboard` before the game's script loads. The game then
   keeps no local table; instead it calls
   - `onTableNeeded()` when it wants the top 5, which the page passes back with
@@ -36,8 +43,8 @@ with play on phones and a hook for sharing high scores:
 
 ### Building
 
-Put the original game files (everything but the .exe; `PINBALL.DAT`, the `.WAV` and `.MID` files, `FONT.DAT`,
-`table.bmp`) in `game_resources/`, then with the [Emscripten SDK](https://emscripten.org) (tested with 3.1.74):
+To include the game's files in the build, put them (everything but the .exe) in `game_resources/`; leave it empty
+for a page that asks for them. Then, with the [Emscripten SDK](https://emscripten.org) (tested with 3.1.74):
 
 ```sh
 emcmake cmake -B build -DCMAKE_BUILD_TYPE=Release
