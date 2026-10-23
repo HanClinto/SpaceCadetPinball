@@ -5,8 +5,8 @@
     open http://localhost:8000/
 
 It serves the folder given (the build's bin/), adds scoreboard.js to the game's page, and keeps every game in
-scores.db (next to this file, or --db). Every game is kept with its time, so each table is a query: all-time,
-personal bests, one player's games.
+scores.db (next to this file, or --db). Every game is kept with its time, so each table is a query: all-time (each
+player's top 5 games, so one player can't fill it), personal bests, one player's games.
 
 Who's playing: behind a reverse proxy that signs people in, pass --user-header with the header it sets (for
 example Remote-User) and only that is trusted. Otherwise players type a name once (the page remembers it), which
@@ -33,6 +33,7 @@ from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 MAX_VALUE = 2**31 - 1  # the game keeps scores in 32-bit integers
+PER_PLAYER = 5  # games each player can have on the all-time table
 TITLES = {"spacecadet": "XP Space Cadet", "spacecadet-ft": "Full Tilt Space Cadet"}
 BOARD = re.compile(r"^[a-z0-9-]{1,40}$")
 SCHEMA = """
@@ -54,20 +55,23 @@ def query(db, sql, args=()):
     return [dict(r) for r in db.execute(sql, args)]
 
 
+def top_games(per_player):
+    """Each player's best games on a board (up to per_player of them), best first, as SQL taking the board"""
+    return f"""SELECT id, user, value, at FROM (
+                SELECT *, ROW_NUMBER() OVER (PARTITION BY user ORDER BY value DESC, at) AS n FROM entries WHERE board = ?)
+              WHERE n <= {int(per_player)} ORDER BY value DESC, at"""
+
+
 def summary(db, board, user, limit):
     """A board's three tables (best first; ties go to whoever got there first), and where the player stands."""
-    best = """SELECT id, user, value, at FROM (
-                SELECT *, ROW_NUMBER() OVER (PARTITION BY user ORDER BY value DESC, at) AS n FROM entries WHERE board = ?)
-              WHERE n = 1 ORDER BY value DESC, at"""
-    everyone = query(db, best, (board,))
+    everyone = query(db, top_games(1), (board,))
     mine = [i for i, e in enumerate(everyone) if e["user"] == user]
     totals = db.execute("SELECT COUNT(*), COUNT(DISTINCT user) FROM entries WHERE board = ?", (board,)).fetchone()
     return {
         "board": {"id": board, "title": TITLES.get(board, board)},
         "me": user if Handler.user_header else None,  # None: the page gives the name
         "views": {
-            "all": query(db, "SELECT id, user, value, at FROM entries WHERE board = ? ORDER BY value DESC, at LIMIT ?",
-                         (board, limit)),
+            "all": query(db, top_games(PER_PLAYER) + " LIMIT ?", (board, limit)),
             "best": everyone[:limit],
             "mine": query(db, "SELECT id, user, value, at FROM entries WHERE board = ? AND user = ? "
                               "ORDER BY value DESC, at LIMIT ?", (board, user, limit)),
@@ -136,8 +140,9 @@ class Handler(SimpleHTTPRequestHandler):
                 r = db.execute("SELECT id, value, at FROM entries WHERE board = ? AND user = ? AND game_id = ?",
                                (board, user, game_id)).fetchone()
                 entry_id, value, now, passed, new_best = r["id"], r["value"], r["at"], [], False
-            rank = db.execute("SELECT COUNT(*) FROM entries WHERE board = ? AND (value > ? OR (value = ? AND at < ?))",
-                              (board, value, value, now)).fetchone()[0] + 1
+            # Its place on the all-time table; None when it isn't one of the player's top games
+            rank = next((i + 1 for i, e in enumerate(query(db, top_games(PER_PLAYER), (board,)))
+                         if e["id"] == entry_id), None)
             result = summary(db, board, user, limit)
             result.update(entry={"id": entry_id, "value": value, "at": now, "rank": rank},
                           previous_best=previous, new_best=new_best, passed=passed)

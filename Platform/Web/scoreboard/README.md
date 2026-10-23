@@ -2,8 +2,8 @@
 
 Everyone who plays on the same page shares one high score table: after each game a dialog says what happened ("New
 personal best! You passed sam! #2 all-time.") and cycles through **Personal bests** (everyone once), **All-time**
-(every game) and **Your games**. The game's own "High Score 1-5" messages show the shared top 5. XP and Full Tilt
-Space Cadet each have their own table. Only one-player games without cheats count.
+(each player's top 5 games, so one player can't fill it) and **Your games**. The game's own "High Score 1-5" messages
+show the shared top 5. XP and Full Tilt Space Cadet each have their own table. Only one-player games without cheats count.
 
 - `scoreboard.js` is the page's side: it is the game's `Module.scoreboard` (see the main README), and talks to a scores
   service over a small JSON API.

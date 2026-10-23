@@ -142,7 +142,7 @@
         else if (result.new_best) parts.push('New personal best!');
         if (result.passed && result.passed.length)
             parts.push('You passed ' + result.passed.slice(0, 3).join(', ') + (result.passed.length > 3 ? ' and ' + (result.passed.length - 3) + ' more' : '') + '!');
-        if (result.entry.rank <= 10) parts.push('#' + result.entry.rank + ' all-time.');
+        if (result.entry.rank && result.entry.rank <= 10) parts.push('#' + result.entry.rank + ' all-time.');
         return parts.join(' ') || fmt(result.entry.value) + ' points.';
     }
 
