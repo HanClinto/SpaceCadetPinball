@@ -3,321 +3,494 @@
 
 <head>
     <meta charset="utf-8">
-    <meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="theme-color" content="#000000">
     <title>3D Pinball for Windows - Space Cadet</title>
     <style>
-        /* Based on https://tpenguinltg.github.io/winclassic/ */
+        /* The game fills the window. On touch screens a bar below it holds the plunger and the menu;
+           the rest of the screen is the flippers (left half, right half). */
         :root {
-            --ActiveBorder: rgb(212, 208, 200);
-            --ActiveTitle: rgb(10, 36, 106);
-            --AppWorkspace: rgb(128, 128, 128);
-            --Background: rgb(58, 110, 165);
-            --ButtonAlternateFace: rgb(192, 192, 192);
-            --ButtonDkShadow: rgb(64, 64, 64);
-            --ButtonFace: rgb(212, 208, 200);
-            --ButtonHilight: rgb(255, 255, 255);
-            --ButtonLight: rgb(212, 208, 200);
-            --ButtonShadow: rgb(128, 128, 128);
-            --ButtonText: rgb(0, 0, 0);
-            --GradientActiveTitle: rgb(166, 202, 240);
-            --GradientInactiveTitle: rgb(192, 192, 192);
-            --GrayText: rgb(128, 128, 128);
-            --Hilight: rgb(10, 36, 106);
-            --HilightText: rgb(255, 255, 255);
-            --HotTrackingColor: rgb(0, 0, 128);
-            --InactiveBorder: rgb(212, 208, 200);
-            --InactiveTitle: rgb(128, 128, 128);
-            --InactiveTitleText: rgb(212, 208, 200);
-            --InfoText: rgb(0, 0, 0);
-            --InfoWindow: rgb(255, 255, 225);
-            --Menu: rgb(212, 208, 200);
-            --MenuBar: rgb(192, 192, 192);
-            --MenuHilight: rgb(0, 0, 128);
-            --MenuText: rgb(0, 0, 0);
-            --Scrollbar: rgb(212, 208, 200);
-            --TitleText: rgb(255, 255, 255);
-            --Window: rgb(255, 255, 255);
-            --WindowFrame: rgb(0, 0, 0);
-            --WindowText: rgb(0, 0, 0);
+            --bar: #16161c;
+            --button: #2a2a35;
+            --button-active: #44445a;
+            --text: #e8e8ee;
+            --muted: #9a9aa8;
+            --accent: #5b8cff;
         }
 
-        body {
-            font-family: Tahoma, Geneva, Verdana, sans-serif;
-            background-color: var(--Background);
-            text-align: center;
-        }
-
-        textarea.emscripten {
-            font-family: monospace;
-            width: 80%;
-        }
-
-        canvas.emscripten {
-            border: 0px none;
-            background-color: black;
-        }
-
-        .titlebar {
-            text-align: start;
-            margin: 0px;
-            padding: 1px;
-            position: relative;
+        html, body {
+            margin: 0;
+            height: 100%;
+            background: #000;
+            color: var(--text);
+            font: 15px/1.4 system-ui, -apple-system, "Segoe UI", sans-serif;
             overflow: hidden;
+            overscroll-behavior: none;
+        }
+
+        #app {
+            position: fixed;
+            inset: 0;
             display: flex;
+            flex-direction: column;
+            touch-action: none;
             user-select: none;
+            -webkit-user-select: none;
+            -webkit-touch-callout: none;
+            padding: env(safe-area-inset-top) env(safe-area-inset-right) 0 env(safe-area-inset-left);
         }
 
-        .titlebar .titlebar-icon {
-            width: 16px;
-            height: 16px;
-            padding: 1px;
+        #stage {
+            position: relative;
+            flex: 1;
+            min-height: 0;
         }
 
-        .titlebar .titlebar-title {
-            display: flex;
-            padding: 0px 2px;
-            overflow: hidden;
-            white-space: nowrap;
-            text-overflow: ellipsis;
-            flex-grow: 1;
-            font-weight: bold;
-            align-items: center;
-        }
-
-        .titlebar .titlebar-wincontrols {
-            display: inline-block;
-            margin: 0px;
-            padding: 1px;
-            min-width: fit-content;
-        }
-
-        .titlebar-wincontrols .buttons-wrapper {
-            display: inline-block;
-            width: auto;
-            margin: 0px;
-            padding: 1px;
-        }
-
-        .titlebar-wincontrols .spacer {
-            display: inline-block;
-            margin: 0px;
-            padding: 0px;
-            width: 2px;
-        }
-
-        .titlebar-wincontrols .button {
-            display: inline-block;
-            min-width: 12px;
-            min-height: 10px;
-            width: 12px;
-            height: 10px;
-            text-align: center;
-            vertical-align: middle;
-            line-height: 10px;
-        }
-
-        .window {
-            font-size: 8pt;
-            color: var(--WindowText);
-            background-color: var(--ButtonFace);
-            border: 1px solid var(--ActiveBorder);
-            box-shadow: -0.5px -0.5px 0px 0.5px var(--ButtonHilight), 0px 0px 0px 1px var(--ButtonShadow), -0.5px -0.5px 0px 1.5px var(--ButtonLight), 0px 0px 0px 2px var(--ButtonDkShadow);
-            padding-right: 0;
-            margin-left: auto;
-            margin-right: auto;
-            display: inline-block;
-        }
-
-        .window.active {
-            border: 1px solid var(--ActiveBorder);
-        }
-
-        .window.active .titlebar .titlebar-icon {
-            background-color: var(--ActiveTitle);
-            color: var(--TitleText);
-        }
-
-        .window.active .titlebar .titlebar-title {
-            background-color: var(--ActiveTitle);
-            background-image: linear-gradient(to right, var(--ActiveTitle), var(--GradientActiveTitle));
-            color: var(--TitleText);
-        }
-
-        .window.active .titlebar .titlebar-wincontrols,
-        .window.active .titlebar .titlebar-wincontrols .buttons-wrapper {
-            background-color: var(--GradientActiveTitle);
-            font-size: 8pt;
-            font-weight: bold;
-        }
-
-
-        .button {
-            margin: 2px;
-        }
-
-        .button span.button-content {
-            display: inline-block;
-        }
-
-        .button:active .button-content {
-            transform: translate(1px, 1px);
-        }
-
-        .button {
-            background-color: var(--ButtonFace);
-            color: var(--ButtonText);
-            box-shadow: -0.5px -0.5px 0px 0.5px var(--ButtonLight), 0px 0px 0px 1px var(--ButtonShadow), -0.5px -0.5px 0px 1.5px var(--ButtonHilight), 0px 0px 0px 2px var(--ButtonDkShadow);
-        }
-
-        .button:active {
-            box-shadow: -0.5px -0.5px 0px 0.5px var(--ButtonShadow), 0px 0px 0px 1px var(--ButtonShadow), -0.5px -0.5px 0px 1.5px var(--WindowFrame), 0px 0px 0px 2px var(--WindowFrame);
-        }
-
-        .button svg path {
-            fill: var(--ButtonText);
-        }
-
-        .titlebar .button:active {
-            box-shadow: -0.5px -0.5px 0px 0.5px var(--ButtonShadow), 0px 0px 0px 1px var(--ButtonLight), -0.5px -0.5px 0px 1.5px var(--ButtonDkShadow), 0px 0px 0px 2px var(--ButtonHilight);
+        #canvas {
+            position: absolute;
+            left: 0;
+            top: 0;
+            display: block;
+            outline: none;
         }
 
         #status {
-            margin: 40px 32px;
+            position: absolute;
+            inset: 0;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            gap: 12px;
+            color: var(--muted);
+        }
+
+        #status progress {
+            width: min(240px, 60vw);
+        }
+
+        /* Touch controls */
+        #bar {
+            display: none;
+            grid-template-columns: 56px 1fr 56px;
+            gap: 10px;
+            align-items: center;
+            padding: 8px 12px calc(8px + env(safe-area-inset-bottom));
+            background: var(--bar);
+        }
+
+        .touch #bar {
+            display: grid;
+        }
+
+        button {
+            font: inherit;
+            color: var(--text);
+            background: var(--button);
+            border: 0;
+            border-radius: 10px;
+            height: 48px;
+            cursor: pointer;
+            touch-action: none;
+        }
+
+        button.pressed,
+        button:active {
+            background: var(--button-active);
+        }
+
+        #launch {
+            font-weight: 600;
+            letter-spacing: .02em;
+        }
+
+        #launch.new-game {
+            background: var(--accent);
+            color: #fff;
+        }
+
+        /* Desktop: a couple of buttons over the right end of the game's own menu bar */
+        #corner {
+            position: absolute;
+            top: 4px;
+            right: 6px;
+            display: flex;
+            gap: 6px;
+        }
+
+        .touch #corner {
+            display: none;
+        }
+
+        #corner button {
+            height: 26px;
+            padding: 0 10px;
+            font-size: 13px;
+            background: rgba(42, 42, 53, .85);
+        }
+
+        /* Menu */
+        #menu {
+            position: fixed;
+            inset: 0;
+            display: none;
+            align-items: flex-end;
+            justify-content: center;
+            background: rgba(0, 0, 0, .5);
+            z-index: 10;
+        }
+
+        #menu.open {
+            display: flex;
+        }
+
+        #menu .sheet {
+            width: min(420px, 100%);
+            background: var(--bar);
+            border-radius: 14px 14px 0 0;
+            padding: 8px 12px calc(12px + env(safe-area-inset-bottom));
+            display: grid;
+            gap: 8px;
+        }
+
+        .touch-only {
+            display: none;
+        }
+
+        .touch .touch-only {
+            display: block;
+        }
+
+        #menu .hint {
+            color: var(--muted);
+            font-size: 13px;
+            padding: 4px 4px 0;
         }
     </style>
 </head>
 
 <body>
-    <div class="window active">
-        <div class="titlebar">
-            <span class="titlebar-title">3D Pinball for Windows - Space Cadet</span>
-            <div class="titlebar-wincontrols">
-                <ul class="buttons-wrapper">
-                    <li class="button minimize">
-                        <svg xmlns="http://www.w3.org/2000/svg" width="0.125017in" height="0.104181in"
-                            viewBox="0 0 12 10" class="button-content replaced-svg">
-                            <path id="Minimize" fill="black" stroke="black" stroke-width="0"
-                                d="M 2.00,7.00            C 2.00,7.00 8.00,7.00 8.00,7.00              8.00,7.00 8.00,9.00 8.00,9.00              8.00,9.00 2.00,9.00 2.00,9.00              2.00,9.00 2.00,7.00 2.00,7.00 Z">
-                            </path>
-                        </svg>
-                    </li>
-                    <li class="button maximize">
-                        <svg xmlns="http://www.w3.org/2000/svg" width="0.125017in" height="0.104181in"
-                            viewBox="0 0 12 10" class="button-content replaced-svg">
-                            <path id="Maximize" fill="black" stroke="black" stroke-width="0"
-                                d="M 2.00,2.00            C 2.00,2.00 9.00,2.00 9.00,2.00              9.00,2.00 9.00,8.00 9.00,8.00              9.00,8.00 2.00,8.00 2.00,8.00              2.00,8.00 2.00,2.00 2.00,2.00 Z            M 1.00,0.00            C 1.00,0.00 1.00,9.00 1.00,9.00              1.00,9.00 10.00,9.00 10.00,9.00              10.00,9.00 10.00,0.00 10.00,0.00              10.00,0.00 1.00,0.00 1.00,0.00 Z">
-                            </path>
-                        </svg>
-                    </li>
-                    <li class="spacer"></li>
-                    <li class="button close">
-                        <svg xmlns:svg="http://www.w3.org/2000/svg" xmlns="http://www.w3.org/2000/svg" version="1.1"
-                            width="12" height="10" class="button-content replaced-svg">
-                            <g transform="translate(0,-1042.3622)" id="layer1">
-                                <path
-                                    d="m 2.0025485,1043.3853 2.0198115,0 0,1.0185 0.984011,0 0,0.984 1.985286,0 0,-0.984 1.001274,0 0,-1.0185 2.002548,0 0,1.0013 0,0 0,0 -1.001274,0 0,1.0012 -1.001274,0 0,0.9841 -1.001274,0 0,1.0012 1.001274,0 0,1.0013 1.001274,0 0,1.0013 1.001274,0 0,1.0013 -2.002548,0 0,-1.0013 -1.001274,0 0,-0.984 -1.985286,0 0,0.984 -1.001274,0 0,1.0013 -2.0025485,0 0,-1.0013 1.0012745,0 0,-1.0013 1.001274,0 0,-1.0013 1.001274,0 0,-1.0012 -1.001274,0 0,-0.9841 -1.001274,0 0,-1.0012 -1.0012745,0 0,-1.0186 z"
-                                    id="Close" fill="black" stroke-width="0"></path>
-                            </g>
-                        </svg>
-                    </li>
-                </ul>
+    <div id="app">
+        <div id="stage">
+            <canvas id="canvas" oncontextmenu="event.preventDefault()" tabindex="-1"></canvas>
+            <div id="status"><span id="status-text">Downloading...</span><progress id="progress" hidden></progress></div>
+            <div id="corner">
+                <button type="button" data-control id="corner-scores">High scores</button>
+                <button type="button" data-control id="corner-fullscreen">Full screen</button>
             </div>
         </div>
-
-        <div class="emscripten" id="status">Downloading...</div>
-        <div class="emscripten">
-            <progress value="0" max="100" id="progress" hidden=1></progress>
+        <div id="bar">
+            <button type="button" data-control id="open-menu" aria-label="Menu">☰</button>
+            <button type="button" data-control id="launch">Launch</button>
+            <button type="button" data-control id="bar-scores" aria-label="High scores">🏆</button>
         </div>
-        <canvas class="emscripten" id="canvas" style="display:none;" oncontextmenu="event.preventDefault()"
-            tabindex="-1"></canvas>
     </div>
 
-    <!--<textarea class="emscripten" id="output" rows="8"></textarea>-->
+    <div id="menu" data-control>
+        <div class="sheet">
+            <button type="button" data-action="new-game">New game</button>
+            <button type="button" data-action="pause">Pause / resume</button>
+            <button type="button" data-action="scores">High scores</button>
+            <button type="button" data-action="sounds">Sound effects on/off</button>
+            <button type="button" data-action="music">Music on/off</button>
+            <button type="button" data-action="shake" class="touch-only">Shake to nudge: on</button>
+            <button type="button" data-action="fullscreen">Full screen</button>
+            <button type="button" data-action="game-menu">Game menu (options, controls) on/off</button>
+            <button type="button" data-action="close">Close</button>
+            <div class="hint touch-only">Left or right half of the screen: flippers. Hold Launch to pull the
+                plunger, let go to launch. Give the phone a sharp jolt to nudge the table (too many and it tilts!).</div>
+        </div>
+    </div>
 
     <script type='text/javascript'>
-        var statusElement = document.getElementById('status');
-        var progressElement = document.getElementById('progress');
+        // GameBindings in options.h
+        var Binding = {
+            LeftFlipper: 0, RightFlipper: 1, Plunger: 2, LeftTableBump: 3, RightTableBump: 4, BottomTableBump: 5,
+            NewGame: 6, TogglePause: 7, ToggleFullScreen: 8, ToggleSounds: 9, ToggleMusic: 10,
+            ShowControlDialog: 11, ToggleMenuDisplay: 12
+        };
 
-        var Module = {
-            preRun: [],
-            postRun: [],
-            print: (function () {
-                var element = document.getElementById('output');
-                if (element) element.value = ''; // clear browser cache
-                return function (text) {
-                    if (arguments.length > 1) text = Array.prototype.slice.call(arguments).join(' ');
-                    // These replacements are necessary if you render to raw HTML
-                    //text = text.replace(/&/g, "&amp;");
-                    //text = text.replace(/</g, "&lt;");
-                    //text = text.replace(/>/g, "&gt;");
-                    //text = text.replace('\n', '<br>', 'g');
-                    console.log(text);
-                    /*if (element) {
-                        element.value += text + "\n";
-                        element.scrollTop = element.scrollHeight; // focus on bottom
-                    }*/
-                };
-            })(),
-            printErr: function (text) {
-                if (arguments.length > 1) text = Array.prototype.slice.call(arguments).join(' ');
-                console.error(text);
-            },
-            canvas: (function () {
-                var canvas = document.getElementById('canvas');
+        var app = document.getElementById('app');
+        var stage = document.getElementById('stage');
+        var statusBox = document.getElementById('status');
+        var statusText = document.getElementById('status-text');
+        var progress = document.getElementById('progress');
+        var launch = document.getElementById('launch');
+        var menu = document.getElementById('menu');
+        var running = false;
 
-                // As a default initial behavior, pop up an alert when webgl context is lost. To make your
-                // application robust, you may want to override this behavior before shipping!
-                // See http://www.khronos.org/registry/webgl/specs/latest/1.0/#5.15.2
-                canvas.addEventListener("webglcontextlost", function (e) { alert('WebGL context lost. You will need to reload the page.'); e.preventDefault(); }, false);
+        function store(key, value) {
+            try {
+                if (value === undefined) return localStorage.getItem('pinball.' + key);
+                localStorage.setItem('pinball.' + key, value);
+            } catch (e) { return null; }
+        }
 
-                return canvas;
-            })(),
-            setStatus: function (text) {
-                if (!Module.setStatus.last) Module.setStatus.last = { time: Date.now(), text: '' };
-                if (text === Module.setStatus.last.text) return;
+        var touchScreen = matchMedia('(pointer: coarse)').matches || navigator.maxTouchPoints > 0;
+        if (touchScreen) app.classList.add('touch');
 
-                var m = text.match(/([^(]+)\((\d+(\.\d+)?)\/(\d+)\)/);
-                var now = Date.now();
-                if (m && now - Module.setStatus.last.time < 30) return; // if this is a progress update, skip it if too soon
-                Module.setStatus.last.time = now;
-                Module.setStatus.last.text = text;
-                if (m) {
-                    text = m[1];
-                    progressElement.value = parseInt(m[2]) * 100;
-                    progressElement.max = parseInt(m[4]) * 100;
-                    progressElement.hidden = false;
-                } else {
-                    progressElement.value = null;
-                    progressElement.max = null;
-                    progressElement.hidden = true;
+        // Extensions (such as Module.scoreboard, below) can be set on Module before the game's script loads
+        var Module = window.Module || {};
+        Module.preRun = Module.preRun || [];
+        Module.postRun = Module.postRun || [];
+        Module.canvas = document.getElementById('canvas');
+        Module.print = function (text) { console.log(text); };
+        Module.printErr = function (text) { console.error(text); };
+        Module.canvas.addEventListener('webglcontextlost', function (e) {
+            alert('The graphics context was lost. Reload the page to keep playing.');
+            e.preventDefault();
+        });
 
-                    var canvas = document.getElementById('canvas');
-                    canvas.style.display = "";
-                }
-                statusElement.innerHTML = text;
-
-                if (text === "") {
-                    statusElement.style.display = "none";
-                    progressElement.style.display = "none";
-                } else {
-                    statusElement.style.display = "";
-                    progressElement.style.display = "";
-                }
-            },
-            totalDependencies: 0,
-            monitorRunDependencies: function (left) {
-                this.totalDependencies = Math.max(this.totalDependencies, left);
-                Module.setStatus(left ? 'Preparing... (' + (this.totalDependencies - left) + '/' + this.totalDependencies + ')' : 'All downloads complete.');
+        Module.setStatus = function (text) {
+            var m = text.match(/([^(]+)\((\d+(\.\d+)?)\/(\d+)\)/);
+            if (m) {
+                text = m[1];
+                progress.value = parseInt(m[2]);
+                progress.max = parseInt(m[4]);
+                progress.hidden = false;
+            } else {
+                progress.hidden = true;
             }
+            statusText.textContent = text;
+            statusBox.style.display = text ? '' : 'none';
         };
-        Module.setStatus('Downloading...');
+        Module.totalDependencies = 0;
+        Module.monitorRunDependencies = function (left) {
+            this.totalDependencies = Math.max(this.totalDependencies, left);
+            Module.setStatus(left ? 'Preparing... (' + (this.totalDependencies - left) + '/' + this.totalDependencies + ')' : '');
+        };
         window.onerror = function () {
-            Module.setStatus('Exception thrown, see JavaScript console');
-            Module.setStatus = function (text) {
-                if (text) Module.printErr('[post-exception status] ' + text);
-            };
+            Module.setStatus('Something went wrong; see the browser console');
         };
+
+        function call(name, args) {
+            if (!running) return 0;
+            var types = (args || []).map(function () { return 'number'; });
+            return Module.ccall(name, 'number', types, args || []);
+        }
+
+        // Settings: SDL keeps them under /libsdl, which lives in this browser's IndexedDB.
+        // The game writes them when asked (web_save_settings); then they're copied to IndexedDB.
+        Module.preRun.push(function () {
+            var FS = Module.FS;
+            FS.mkdir('/libsdl');
+            FS.mount(FS.filesystems.IDBFS, {}, '/libsdl');
+            Module.addRunDependency('settings');
+            FS.syncfs(true, function (err) {
+                if (err) console.warn('Could not load settings', err);
+                Module.removeRunDependency('settings');
+            });
+        });
+        var saving = null;
+        Module.syncSettings = function () {
+            if (!running) return Promise.resolve();
+            if (!saving) {
+                saving = new Promise(function (resolve) {
+                    call('web_save_settings');
+                    Module.FS.syncfs(false, function (err) {
+                        if (err) console.warn('Could not save settings', err);
+                        saving = null;
+                        resolve();
+                    });
+                });
+            }
+            return saving;
+        };
+        setInterval(Module.syncSettings, 15000);
+        document.addEventListener('visibilitychange', function () {
+            if (document.hidden) {
+                Module.syncSettings();
+                // Don't let the ball drain while the tab is away
+                if (running && (call('web_game_state') & 4) === 0 && (call('web_game_state') & 3) === 0)
+                    press(Binding.TogglePause, true);
+            }
+        });
+        addEventListener('pagehide', function () { Module.syncSettings(); });
+
+        // The canvas fills the stage, drawn at the screen's full resolution
+        function fit() {
+            var r = stage.getBoundingClientRect();
+            var ratio = Math.min(window.devicePixelRatio || 1, 3);
+            Module.canvas.style.width = r.width + 'px';
+            Module.canvas.style.height = r.height + 'px';
+            if (running && r.width > 0 && r.height > 0)
+                call('web_resize', [Math.round(r.width * ratio), Math.round(r.height * ratio), ratio]);
+        }
+        new ResizeObserver(fit).observe(stage);
+
+        Module.postRun.push(function () {
+            running = true;
+            fit();
+            // Phones: the game's own menu bar is too small to tap; the menu here replaces it
+            if (touchScreen && store('menuHidden') !== 'no') call('web_show_menu', [0]);
+            setInterval(updateLaunch, 250);
+        });
+
+        function press(binding, pressed) {
+            call('web_input', [binding, pressed ? 1 : 0]);
+            if (pressed) call('web_input', [binding, 0]);
+        }
+
+        // Full screen (not available for pages on iPhones)
+        var canFullscreen = !!(document.documentElement.requestFullscreen || document.documentElement.webkitRequestFullscreen);
+        Module.toggleFullscreen = function () {
+            var el = document.documentElement;
+            if (document.fullscreenElement || document.webkitFullscreenElement)
+                (document.exitFullscreen || document.webkitExitFullscreen).call(document);
+            else
+                (el.requestFullscreen || el.webkitRequestFullscreen).call(el);
+        };
+        if (!canFullscreen) {
+            document.getElementById('corner-fullscreen').style.display = 'none';
+            document.querySelector('[data-action="fullscreen"]').style.display = 'none';
+        }
+
+        // Touch: each finger on the game is a flipper, by which half of the screen it's on
+        var fingers = {};
+        function isControl(el) { return el && el.closest && el.closest('[data-control]'); }
+        app.addEventListener('touchstart', function (e) {
+            if (!running) return;
+            askForMotion();
+            for (var i = 0; i < e.changedTouches.length; i++) {
+                var t = e.changedTouches[i];
+                if (isControl(t.target)) continue;
+                var binding = t.clientX < window.innerWidth / 2 ? Binding.LeftFlipper : Binding.RightFlipper;
+                fingers[t.identifier] = binding;
+                call('web_input', [binding, 1]);
+                if (navigator.vibrate) navigator.vibrate(8);
+            }
+            if (!isControl(e.target)) {
+                e.preventDefault();
+                e.stopPropagation(); // not to SDL: the touch would also click the game's menu
+            }
+        }, { capture: true, passive: false });
+        function fingerUp(e) {
+            for (var i = 0; i < e.changedTouches.length; i++) {
+                var t = e.changedTouches[i];
+                if (fingers[t.identifier] === undefined) continue;
+                call('web_input', [fingers[t.identifier], 0]);
+                delete fingers[t.identifier];
+            }
+            if (!isControl(e.target)) {
+                e.preventDefault();
+                e.stopPropagation();
+            }
+        }
+        app.addEventListener('touchend', fingerUp, { capture: true, passive: false });
+        app.addEventListener('touchcancel', fingerUp, { capture: true, passive: false });
+        app.addEventListener('touchmove', function (e) {
+            if (!isControl(e.target)) { e.preventDefault(); e.stopPropagation(); }
+        }, { capture: true, passive: false });
+
+        // Launch: hold to pull the plunger back, let go to launch. After a game it starts a new one.
+        var plunging = false;
+        function updateLaunch() {
+            var over = (call('web_game_state') & 3) !== 0;
+            launch.textContent = over ? 'New game' : 'Launch';
+            launch.classList.toggle('new-game', over);
+        }
+        launch.addEventListener('pointerdown', function (e) {
+            e.preventDefault();
+            launch.setPointerCapture(e.pointerId);
+            if (launch.classList.contains('new-game')) {
+                press(Binding.NewGame, true);
+                updateLaunch();
+                return;
+            }
+            plunging = true;
+            launch.classList.add('pressed');
+            call('web_input', [Binding.Plunger, 1]);
+        });
+        function plungerUp() {
+            if (!plunging) return;
+            plunging = false;
+            launch.classList.remove('pressed');
+            call('web_input', [Binding.Plunger, 0]);
+        }
+        launch.addEventListener('pointerup', plungerUp);
+        launch.addEventListener('pointercancel', plungerUp);
+
+        // Shake to nudge: a sharp jolt left, right or up bumps the table that way
+        var shakeOn = store('shake') !== 'off';
+        var lastNudge = 0, gravity = null, motionAsked = false;
+        function askForMotion() {
+            if (motionAsked || !shakeOn) return;
+            motionAsked = true;
+            // iOS asks the player first, and only from a tap
+            if (window.DeviceMotionEvent && typeof DeviceMotionEvent.requestPermission === 'function')
+                DeviceMotionEvent.requestPermission().catch(function () { });
+        }
+        addEventListener('devicemotion', function (e) {
+            if (!running || !shakeOn) return;
+            var x, y, a = e.acceleration;
+            if (a && a.x !== null) {
+                x = a.x; y = a.y;
+            } else {
+                // No gravity-free reading: take gravity out with a slow average
+                var g = e.accelerationIncludingGravity;
+                if (!g || g.x === null) return;
+                gravity = gravity ? { x: gravity.x * .9 + g.x * .1, y: gravity.y * .9 + g.y * .1 } : { x: g.x, y: g.y };
+                x = g.x - gravity.x; y = g.y - gravity.y;
+            }
+            // The device's axes to the screen's: angle 90 is the phone turned left (its top on the left)
+            var angle = (screen.orientation && screen.orientation.angle) || window.orientation || 0;
+            var sx = x, sy = y;
+            if (angle === 90) { sx = -y; sy = x; }
+            else if (angle === 180) { sx = -x; sy = -y; }
+            else if (angle === 270 || angle === -90) { sx = y; sy = -x; }
+
+            var now = performance.now(), jolt = 12; // m/s², a firm flick; holding and walking stay under 3
+            if (now - lastNudge < 400) return;
+            var binding = null;
+            if (Math.abs(sx) > jolt && Math.abs(sx) > Math.abs(sy))
+                binding = sx > 0 ? Binding.LeftTableBump : Binding.RightTableBump; // pushed right: bumped from the left
+            else if (sy > jolt)
+                binding = Binding.BottomTableBump;
+            if (binding === null) return;
+            lastNudge = now;
+            call('web_input', [binding, 1]);
+            setTimeout(function () { call('web_input', [binding, 0]); }, 120);
+        });
+
+        // Menu
+        function setShakeLabel() {
+            document.querySelector('[data-action="shake"]').textContent = 'Shake to nudge: ' + (shakeOn ? 'on' : 'off');
+        }
+        setShakeLabel();
+        document.getElementById('open-menu').addEventListener('click', function () { menu.classList.add('open'); });
+        document.getElementById('bar-scores').addEventListener('click', function () { call('web_show_high_scores'); });
+        document.getElementById('corner-scores').addEventListener('click', function () { call('web_show_high_scores'); });
+        document.getElementById('corner-fullscreen').addEventListener('click', function () { Module.toggleFullscreen(); });
+        menu.addEventListener('click', function (e) {
+            var action = e.target.getAttribute && e.target.getAttribute('data-action');
+            if (e.target === menu) action = 'close';
+            if (!action) return;
+            if (action === 'new-game') press(Binding.NewGame, true);
+            else if (action === 'pause') press(Binding.TogglePause, true);
+            else if (action === 'scores') call('web_show_high_scores');
+            else if (action === 'sounds') press(Binding.ToggleSounds, true);
+            else if (action === 'music') press(Binding.ToggleMusic, true);
+            else if (action === 'fullscreen') Module.toggleFullscreen();
+            else if (action === 'game-menu') {
+                var hidden = store('menuHidden') !== 'no';
+                store('menuHidden', hidden ? 'no' : 'yes');
+                call('web_show_menu', [hidden ? 1 : 0]);
+            }
+            else if (action === 'shake') {
+                shakeOn = !shakeOn;
+                store('shake', shakeOn ? 'on' : 'off');
+                setShakeLabel();
+                askForMotion();
+                return;
+            }
+            menu.classList.remove('open');
+        });
+
+        window.Module = Module;
     </script>
+    <!-- Extensions: scripts placed here run before the game starts, e.g. one that sets Module.scoreboard -->
     {{{ SCRIPT }}}
 </body>
 

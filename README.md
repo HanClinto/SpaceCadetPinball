@@ -11,6 +11,43 @@ Reverse engineering of `3D Pinball for Windows - Space Cadet`, a game bundled wi
 Place compiled executable into a folder containing original game resources (not included).\
 Supports data files from Windows and Full Tilt versions of the game.
 
+## Web version (this fork)
+
+This fork is the [Emscripten port by alula](https://github.com/alula/SpaceCadetPinball) brought up to upstream v2.1,
+with play on phones and a hook for sharing high scores:
+
+- **Upstream v2.1**: all the gameplay fixes, volume controls, key and controller remapping, translations.
+- **Phones and tablets**: the left and right halves of the screen are the flippers; hold *Launch* to pull the
+  plunger. Give the phone a sharp jolt left, right or up to nudge the table (iOS asks for motion access on the
+  first tap). Held upright, the table fills the width and the score panel sits below it.
+- **Smooth on any screen**: the game updates at a fixed rate (120 per second, as on the desktop) and draws once
+  per browser frame, on 60 Hz and 120 Hz screens alike.
+- **Settings persist** in the browser (IndexedDB).
+- **Shared high scores** (optional): a page can set `Module.scoreboard` before the game's script loads. The game then
+  keeps no local table; instead it calls
+  - `onTableNeeded()` when it wants the top 5, which the page passes back with
+    `Module.ccall('web_set_high_score', null, ['number', 'string', 'number'], [position, name, score])`
+    (also any time later, e.g. when someone else sets a new record),
+  - `submit({scores, players, cheated})` when a game ends (`scores` per player; `cheated` is true if any cheat was
+    on, including ones that outlast the game they were typed in), and
+  - `show()` for *Game > High Scores*.
+
+  Without `Module.scoreboard` the game keeps its usual high score table in the browser.
+
+### Building
+
+Put the original game files (everything but the .exe; `PINBALL.DAT`, the `.WAV` and `.MID` files, `FONT.DAT`,
+`table.bmp`) in `game_resources/`, then with the [Emscripten SDK](https://emscripten.org) (tested with 3.1.74):
+
+```sh
+emcmake cmake -B build -DCMAKE_BUILD_TYPE=Release
+cmake --build build
+```
+
+or without installing it: `docker run --rm -v "$PWD":/src -w /src emscripten/emsdk:3.1.74 sh -c "emcmake cmake -B build
+-DCMAKE_BUILD_TYPE=Release && cmake --build build"`. The page is `bin/SpaceCadetPinball.html`, next to its `.js`,
+`.wasm` and `.data`; serve the folder over HTTP.
+
 ## Known source ports
 
 | Platform           | Author          | URL                                                                                                        |

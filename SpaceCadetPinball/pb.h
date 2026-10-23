@@ -9,6 +9,7 @@ class DatFile;
 class TBall;
 class TTextBox;
 enum class Msg : int;
+enum class GameBindings;
 
 enum class GameModes
 {
@@ -71,6 +72,7 @@ public:
 	static void loose_focus();
 	static void InputUp(GameInput input);
 	static void InputDown(GameInput input);
+	static void BindingInput(GameBindings binding, bool pressed);
 	static void launch_ball();
 	static void end_game();
 	static void high_scores();
@@ -81,8 +83,10 @@ public:
 	static int get_rc_int(Msg uID, int* dst);
 	static std::string make_path_name(const std::string& fileName);
 	static void ShowMessageBox(Uint32 flags, LPCSTR title, LPCSTR message);
+	static bool IsDemo() { return demo_mode; }
 private:
 	static bool demo_mode;
 	static float IdleTimerMs;
+	static void TableInput(GameBindings binding, bool pressed);
 	static float BallToBallCollision(const ray_type& ray, const TBall& ball, TEdgeSegment** edge, float collisionDistance);
 };

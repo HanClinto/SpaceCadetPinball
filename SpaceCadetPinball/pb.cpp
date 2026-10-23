@@ -536,28 +536,62 @@ void pb::InputUp(GameInput input)
 	const auto bindings = options::MapGameInput(input);
 	for (const auto binding : bindings)
 	{
-		switch (binding)
-		{
-		case GameBindings::LeftFlipper:
-			MainTable->Message(MessageCode::LeftFlipperInputReleased, time_now);
-			break;
-		case GameBindings::RightFlipper:
-			MainTable->Message(MessageCode::RightFlipperInputReleased, time_now);
-			break;
-		case GameBindings::Plunger:
-			MainTable->Message(MessageCode::PlungerInputReleased, time_now);
-			break;
-		case GameBindings::LeftTableBump:
+		TableInput(binding, false);
+	}
+}
+
+void pb::BindingInput(GameBindings binding, bool pressed)
+{
+	if (pressed)
+		winmain::HandleGameBinding(binding, false);
+
+	if (game_mode != GameModes::InGame || winmain::single_step || demo_mode)
+		return;
+
+	if (pressed)
+	{
+		if (CreditsActive)
+			MissTextBox->Clear(true);
+		CreditsActive = false;
+		IdleTimerMs = 0;
+	}
+	TableInput(binding, pressed);
+}
+
+void pb::TableInput(GameBindings binding, bool pressed)
+{
+	switch (binding)
+	{
+	case GameBindings::LeftFlipper:
+		MainTable->Message(pressed ? MessageCode::LeftFlipperInputPressed : MessageCode::LeftFlipperInputReleased,
+		                   time_now);
+		break;
+	case GameBindings::RightFlipper:
+		MainTable->Message(pressed ? MessageCode::RightFlipperInputPressed : MessageCode::RightFlipperInputReleased,
+		                   time_now);
+		break;
+	case GameBindings::Plunger:
+		MainTable->Message(pressed ? MessageCode::PlungerInputPressed : MessageCode::PlungerInputReleased, time_now);
+		break;
+	case GameBindings::LeftTableBump:
+		if (!pressed)
 			nudge::un_nudge_right(0, nullptr);
-			break;
-		case GameBindings::RightTableBump:
+		else if (!MainTable->TiltLockFlag)
+			nudge::nudge_right();
+		break;
+	case GameBindings::RightTableBump:
+		if (!pressed)
 			nudge::un_nudge_left(0, nullptr);
-			break;
-		case GameBindings::BottomTableBump:
+		else if (!MainTable->TiltLockFlag)
+			nudge::nudge_left();
+		break;
+	case GameBindings::BottomTableBump:
+		if (!pressed)
 			nudge::un_nudge_up(0, nullptr);
-			break;
-		default: break;
-		}
+		else if (!MainTable->TiltLockFlag)
+			nudge::nudge_up();
+		break;
+	default: break;
 	}
 }
 
@@ -588,31 +622,7 @@ void pb::InputDown(GameInput input)
 
 	for (const auto binding : bindings)
 	{
-		switch (binding)
-		{
-		case GameBindings::LeftFlipper:
-			MainTable->Message(MessageCode::LeftFlipperInputPressed, time_now);
-			break;
-		case GameBindings::RightFlipper:
-			MainTable->Message(MessageCode::RightFlipperInputPressed, time_now);
-			break;
-		case GameBindings::Plunger:
-			MainTable->Message(MessageCode::PlungerInputPressed, time_now);
-			break;
-		case GameBindings::LeftTableBump:
-			if (!MainTable->TiltLockFlag)
-				nudge::nudge_right();
-			break;
-		case GameBindings::RightTableBump:
-			if (!MainTable->TiltLockFlag)
-				nudge::nudge_left();
-			break;
-		case GameBindings::BottomTableBump:
-			if (!MainTable->TiltLockFlag)
-				nudge::nudge_up();
-			break;
-		default: break;
-		}
+		TableInput(binding, true);
 	}
 
 	if (cheat_mode && input.Type == InputTypes::Keyboard)
@@ -671,6 +681,15 @@ void pb::end_game()
 		scores[index] = scorePtr->ScoreStruct->Score;
 		scoreIndex[index] = index;
 		++scorePtr;
+	}
+
+	if (high_score::External)
+	{
+		// Some cheats outlive the game they were typed in, so CheatsUsed alone isn't enough
+		auto cheated = MainTable->CheatsUsed || cheat_mode || control::easyMode || control::table_unlimited_balls;
+		if (!demo_mode)
+			high_score::submit_external(scores, playerCount, cheated);
+		return;
 	}
 
 	for (auto i = 0; i < playerCount; ++i)

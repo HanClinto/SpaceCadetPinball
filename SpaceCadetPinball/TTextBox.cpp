@@ -172,7 +172,7 @@ void TTextBox::DrawImGui()
 	snprintf(windowName, sizeof(windowName), "TTextBox_%p", static_cast<void*>(this));
 	if (ImGui::Begin(windowName, nullptr, window_flags))
 	{
-		ImGui::SetWindowFontScale(fullscrn::GetScreenToPinballRatio());
+		ImGui::SetWindowFontScale(static_cast<float>(rect.w) / Width);
 
 		// ToDo: centered text in FT
 		ImGui::PushStyleColor(ImGuiCol_Text, pb::TextBoxColor);

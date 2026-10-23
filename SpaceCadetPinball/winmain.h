@@ -75,6 +75,8 @@ public:
 	static bool HighScoresEnabled;
 	static bool DemoActive;
 	static int MainMenuHeight;
+	static float UiPixelRatio; // web: device pixels per CSS pixel, so menus and dialogs keep their size
+	static bool PageHasMenu; // web: the page has its own menu, so no button to bring back a hidden menu bar
 
 	static int WinMain(LPCSTR lpCmdLine);
 	static int event_handler(const SDL_Event* event);

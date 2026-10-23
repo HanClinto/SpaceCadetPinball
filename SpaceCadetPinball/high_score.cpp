@@ -6,15 +6,31 @@
 #include "score.h"
 #include "translations.h"
 
+#ifdef __EMSCRIPTEN__
+#include <emscripten.h>
+#endif
+
 bool high_score::dlg_enter_name;
 bool high_score::ShowDialog = false;
 high_score_entry high_score::DlgData;
 std::vector<high_score_entry> high_score::ScoreQueue;
 high_score_struct high_score::highscore_table[5];
+bool high_score::External = false;
 
 int high_score::read()
 {
 	char Buffer[20];
+
+#ifdef __EMSCRIPTEN__
+	External = EM_ASM_INT({ return Module.scoreboard ? 1 : 0; });
+	if (External)
+	{
+		// The page fills the table now if it has it, and again whenever it changes
+		clear_table();
+		EM_ASM({ if (Module.scoreboard.onTableNeeded) Module.scoreboard.onTableNeeded(); });
+		return 0;
+	}
+#endif
 
 	int checkSum = 0;
 	clear_table();
@@ -46,6 +62,9 @@ int high_score::read()
 int high_score::write()
 {
 	char Buffer[20];
+
+	if (External)
+		return 0;
 
 	int checkSum = 0;
 	for (auto position = 0; position < 5; ++position)
@@ -108,7 +127,36 @@ void high_score::place_new_score_into(high_score_entry data)
 
 void high_score::show_high_score_dialog()
 {
+#ifdef __EMSCRIPTEN__
+	if (External)
+	{
+		EM_ASM({ if (Module.scoreboard.show) Module.scoreboard.show(); });
+		return;
+	}
+#endif
 	ShowDialog = true;
+}
+
+void high_score::set_external_entry(int position, const char* name, int score)
+{
+	if (position < 0 || position > 4)
+		return;
+	auto& entry = highscore_table[position];
+	strncpy(entry.Name, name ? name : "", sizeof entry.Name - 1);
+	entry.Name[sizeof entry.Name - 1] = 0;
+	entry.Score = score;
+}
+
+void high_score::submit_external(const int* scores, int playerCount, bool cheated)
+{
+#ifdef __EMSCRIPTEN__
+	EM_ASM({
+		if (!Module.scoreboard.submit) return;
+		var scores = [];
+		for (var i = 0; i < $1; i++) scores.push(HEAP32[($0 >> 2) + i]);
+		Module.scoreboard.submit({scores: scores, players: $1, cheated: !!$2});
+	}, scores, playerCount, cheated);
+#endif
 }
 
 void high_score::show_and_set_high_score_dialog(high_score_entry score)

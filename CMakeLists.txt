@@ -201,6 +201,7 @@ set(SOURCE_FILES
         SpaceCadetPinball/imstb_truetype.h
         SpaceCadetPinball/DebugOverlay.cpp
         SpaceCadetPinball/DebugOverlay.h
+        SpaceCadetPinball/web.cpp
         )
 
 if(MUSIC_TSF)
@@ -253,7 +254,7 @@ if(${CMAKE_SYSTEM_NAME} MATCHES "Emscripten")
         target_link_libraries(SpaceCadetPinball idbfs.js)
         set_target_properties(SpaceCadetPinball PROPERTIES LINK_FLAGS
         "-sALLOW_MEMORY_GROWTH=1 -sFORCE_FILESYSTEM=1 \
-        -sEXPORTED_RUNTIME_METHODS=ccall,FS \
+        -sEXPORTED_RUNTIME_METHODS=ccall,FS,addRunDependency,removeRunDependency \
         --shell-file ${CMAKE_CURRENT_SOURCE_DIR}/SpaceCadetPinball/emscripten_shell.html \
         --preload-file ${CMAKE_CURRENT_SOURCE_DIR}/game_resources@/game_resources")
 endif()

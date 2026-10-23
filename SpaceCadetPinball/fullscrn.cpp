@@ -5,6 +5,7 @@
 #include "options.h"
 #include "pb.h"
 #include "render.h"
+#include "TPinballTable.h"
 #include "winmain.h"
 
 
@@ -20,6 +21,8 @@ const resolution_info fullscrn::resolution_array[3] =
 };
 float fullscrn::ScaleX = 1;
 float fullscrn::ScaleY = 1;
+bool fullscrn::Portrait = false;
+std::vector<screen_region> fullscrn::Regions{};
 int fullscrn::OffsetX = 0;
 int fullscrn::OffsetY = 0;
 
@@ -114,6 +117,14 @@ void fullscrn::window_size_changed()
 	SDL_GetRendererOutputSize(winmain::Renderer, &width, &height);
 	int menuHeight = options::Options.ShowMenu ? winmain::MainMenuHeight : 0;
 	height -= menuHeight;
+
+	Portrait = height > width * 1.2f && render::vscreen && pb::MainTable;
+	if (Portrait)
+	{
+		LayoutPortrait(width, height, menuHeight);
+		return;
+	}
+
 	auto res = &resolution_array[resolution];
 	ScaleX = static_cast<float>(width) / res->TableWidth;
 	ScaleY = static_cast<float>(height) / res->TableHeight;
@@ -143,9 +154,82 @@ void fullscrn::window_size_changed()
 	};
 }
 
+void fullscrn::LayoutPortrait(int width, int height, int menuHeight)
+{
+	auto vW = render::vscreen->Width, vH = render::vscreen->Height;
+	auto boardW = pb::MainTable->Width, sideW = vW - boardW;
+
+	Regions.clear();
+	Regions.push_back({{0, 0, boardW, vH}, {}});
+	if (pb::FullTiltMode)
+	{
+		Regions.push_back({{boardW, 0, sideW, vH}, {}});
+	}
+	else
+	{
+		// 3DPB's sidebar is a tall logo panel over the score panels. Side by side they fit under the board.
+		auto split = vH * 184 / 416;
+		Regions.push_back({{boardW, 0, sideW, split}, {}});
+		Regions.push_back({{boardW, split, sideW, vH - split}, {}});
+	}
+
+	int rowW = 0, rowH = 0;
+	for (auto i = 1u; i < Regions.size(); i++)
+	{
+		rowW += Regions[i].Src.w;
+		rowH = std::max(rowH, Regions[i].Src.h);
+	}
+
+	// The board and the row under it each fill the width, shrunk together if that's too tall
+	auto boardScale = static_cast<float>(width) / boardW, rowScale = static_cast<float>(width) / rowW;
+	auto fit = std::min(1.0f, height / (vH * boardScale + rowH * rowScale));
+	boardScale *= fit;
+	rowScale *= fit;
+	if (options::Options.IntegerScaling && boardScale > 1)
+	{
+		rowScale *= std::floor(boardScale) / boardScale;
+		boardScale = std::floor(boardScale);
+	}
+	ScaleX = ScaleY = boardScale;
+
+	auto scaled = [](int value, float scale) { return static_cast<int>(std::round(value * scale)); };
+	auto top = menuHeight + (height - scaled(vH, boardScale) - scaled(rowH, rowScale)) / 2;
+	auto& board = Regions[0];
+	board.Dst = {(width - scaled(boardW, boardScale)) / 2, top, scaled(boardW, boardScale), scaled(vH, boardScale)};
+	auto x = (width - scaled(rowW, rowScale)) / 2;
+	for (auto i = 1u; i < Regions.size(); i++)
+	{
+		auto& src = Regions[i].Src;
+		Regions[i].Dst = {x, top + board.Dst.h, scaled(src.w, rowScale), scaled(src.h, rowScale)};
+		x += Regions[i].Dst.w;
+	}
+
+	OffsetX = board.Dst.x;
+	OffsetY = board.Dst.y - menuHeight;
+	// The whole vscreen at the board's position and scale; the debug overlay uses it, only its board part shows
+	render::DestinationRect = SDL_Rect{board.Dst.x, board.Dst.y, scaled(vW, boardScale), scaled(vH, boardScale)};
+}
+
 SDL_Rect fullscrn::GetScreenRectFromPinballRect(SDL_Rect rect)
 {
 	SDL_Rect converted_rect;
+
+	if (Portrait)
+	{
+		for (const auto& region : Regions)
+		{
+			const auto& src = region.Src;
+			if (rect.x >= src.x && rect.x < src.x + src.w && rect.y >= src.y && rect.y < src.y + src.h)
+			{
+				auto scale = static_cast<float>(region.Dst.w) / src.w;
+				converted_rect.x = region.Dst.x + static_cast<int>((rect.x - src.x) * scale);
+				converted_rect.y = region.Dst.y + static_cast<int>((rect.y - src.y) * scale);
+				converted_rect.w = static_cast<int>(rect.w * scale);
+				converted_rect.h = static_cast<int>(rect.h * scale);
+				return converted_rect;
+			}
+		}
+	}
 
 	converted_rect.x = rect.x * render::DestinationRect.w / render::vscreen->Width + render::DestinationRect.x;
 	converted_rect.y = rect.y * render::DestinationRect.h / render::vscreen->Height + render::DestinationRect.y;

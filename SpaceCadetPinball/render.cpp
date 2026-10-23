@@ -456,7 +456,11 @@ void render::PresentVScreen()
 {
 	vscreen->BlitToTexture();
 
-	if (offset_x == 0 && offset_y == 0)
+	if (fullscrn::Portrait)
+	{
+		PresentPortrait();
+	}
+	else if (offset_x == 0 && offset_y == 0)
 	{
 		SDL_RenderCopy(winmain::Renderer, vscreen->Texture, nullptr, &DestinationRect);
 	}
@@ -522,5 +526,25 @@ void render::PresentVScreen()
 	if (options::Options.DebugOverlay)
 	{
 		DebugOverlay::DrawOverlay();
+	}
+}
+
+void render::PresentPortrait()
+{
+	for (auto i = 0u; i < fullscrn::Regions.size(); i++)
+	{
+		const auto& region = fullscrn::Regions[i];
+		// The board shakes when nudged; the sidebar stays put
+		if (i == 0 && (offset_x != 0 || offset_y != 0))
+		{
+			auto dst = region.Dst;
+			dst.x += static_cast<int>(round(offset_x * fullscrn::ScaleX));
+			dst.y += static_cast<int>(round(offset_y * fullscrn::ScaleY));
+			SDL_RenderCopy(winmain::Renderer, vscreen->Texture, &region.Src, &dst);
+		}
+		else
+		{
+			SDL_RenderCopy(winmain::Renderer, vscreen->Texture, &region.Src, &region.Dst);
+		}
 	}
 }

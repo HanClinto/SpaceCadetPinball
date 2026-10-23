@@ -48,6 +48,8 @@ bool winmain::LaunchBallEnabled = true;
 bool winmain::HighScoresEnabled = true;
 bool winmain::DemoActive = false;
 int winmain::MainMenuHeight = 0;
+float winmain::UiPixelRatio = 1;
+bool winmain::PageHasMenu = false;
 std::string winmain::FpsDetails, winmain::PrevSdlError;
 unsigned winmain::PrevSdlErrorCount = 0;
 double winmain::UpdateToFrameRatio;
@@ -94,7 +96,11 @@ int winmain::WinMain(LPCSTR lpCmdLine)
 		pb::get_rc_string(Msg::STRING139),
 		SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED,
 		800, 556,
+#ifdef __EMSCRIPTEN__
+		SDL_WINDOW_HIDDEN // the page sizes the canvas (web_resize)
+#else
 		SDL_WINDOW_HIDDEN | SDL_WINDOW_RESIZABLE
+#endif
 	);
 	MainWindow = window;
 	if (!window)
@@ -546,7 +552,7 @@ void winmain::RenderUi()
 	ImGui::PushStyleColor(ImGuiCol_MenuBarBg, ImVec4{});
 	ImGui::PushStyleColor(ImGuiCol_WindowBg, ImVec4{});
 	ImGui::PushStyleVar(ImGuiStyleVar_WindowBorderSize, 0);
-	if (!Options.ShowMenu && ImGui::BeginMainMenuBar())
+	if (!Options.ShowMenu && !PageHasMenu && ImGui::BeginMainMenuBar())
 	{
 		if (ImGui::MenuItem("Menu"))
 		{
@@ -700,7 +706,7 @@ void winmain::RenderUi()
 				if (ImGui::DragFloat("UI Scale", &Options.UIScale.V, 0.005f, 0.8f, 5,
 				                     "%.2f", ImGuiSliderFlags_AlwaysClamp))
 				{
-					ImIO->FontGlobalScale = Options.UIScale;
+					ImIO->FontGlobalScale = Options.UIScale * UiPixelRatio;
 				}
 				ImGui::Separator();
 
