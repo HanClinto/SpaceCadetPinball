@@ -31,10 +31,13 @@ changes were re-applied on top:
   plunger and let go to launch; after a game it becomes **New game**. The bar also has ☰, the menu (new game, pause,
   sound, music, the game's own menu bar for its options), ⛶ full screen and 🏆 the high scores.
 - **Shake to nudge**: a sharp jolt of the device left, right or up bumps the table that way, as the nudge keys do
-  (too many and it tilts, as in the original). The edge of the screen it was bumped from lights up, and Android
-  phones buzz. It works wherever the browser gets motion readings (phones, tablets, laptops with a motion sensor);
-  elsewhere the option is grayed out. The menu sets how hard a jolt it takes (low, medium, high sensitivity) or
-  turns it off. iOS asks for motion access first.
+  (too many and it tilts, as in the original). Each nudge flashes the screen's border, heaviest on the edge it was
+  bumped from, with a label saying which way the table went, plays a short thump, and buzzes Android phones (iPhones
+  get a haptic tick where iOS allows it, through a switch-control workaround). **Test the shake** in the menu shows
+  a live meter of how hard you're jolting against the low, medium and high trip points, flashes when a jolt would
+  nudge, and sets the sensitivity (or off) and the sound; the game pauses meanwhile. It works wherever the browser
+  gets motion readings (phones, tablets, laptops with a motion sensor); elsewhere it's grayed out. iOS asks for
+  motion access first.
 - **Held upright**, the table fills the width and the score panel sits below it, its logo half and score half side
   by side; the score panel's text boxes follow. On a computer, or a phone held sideways, the layout is the original.
 - **Sharp on high-density screens**: the canvas is drawn at the screen's full resolution, with the game's menus and

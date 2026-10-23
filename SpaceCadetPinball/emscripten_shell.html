@@ -235,14 +235,16 @@
             background: rgba(42, 42, 53, .85);
         }
 
-        /* Shake to nudge: the edge the table was bumped from lights up */
+        /* Shake to nudge: the whole screen's border flashes, heaviest on the edge the table was bumped from,
+           with a label saying which way it went */
         #nudge {
             position: fixed;
             inset: 0;
             pointer-events: none;
-            z-index: 5;
+            z-index: 25;
             opacity: 0;
-            transition: opacity .35s ease-out;
+            transition: opacity .7s ease-out;
+            --glow: rgba(255, 196, 64, .9);
         }
 
         #nudge.show {
@@ -250,9 +252,117 @@
             transition: none;
         }
 
-        #nudge.left { box-shadow: inset 28px 0 24px -12px rgba(255, 196, 64, .9); }
-        #nudge.right { box-shadow: inset -28px 0 24px -12px rgba(255, 196, 64, .9); }
-        #nudge.bottom { box-shadow: inset 0 -28px 24px -12px rgba(255, 196, 64, .9); }
+        #nudge.left { box-shadow: inset 0 0 0 6px var(--glow), inset 90px 0 60px -30px var(--glow); }
+        #nudge.right { box-shadow: inset 0 0 0 6px var(--glow), inset -90px 0 60px -30px var(--glow); }
+        #nudge.bottom { box-shadow: inset 0 0 0 6px var(--glow), inset 0 -90px 60px -30px var(--glow); }
+
+        #nudge span {
+            position: absolute;
+            top: calc(14px + env(safe-area-inset-top));
+            left: 50%;
+            transform: translateX(-50%);
+            padding: 4px 16px;
+            border-radius: 999px;
+            background: var(--glow);
+            color: #1b1400;
+            font-weight: 700;
+            font-size: 17px;
+        }
+
+        /* Shake test: how hard a jolt was, against each sensitivity's trip point */
+        #shake-test {
+            position: fixed;
+            inset: 0;
+            z-index: 15;
+            display: none;
+            align-items: center;
+            justify-content: center;
+            background: rgba(0, 0, 0, .75);
+        }
+
+        #shake-test.open {
+            display: flex;
+        }
+
+        #shake-test .box {
+            width: min(400px, calc(100vw - 24px));
+            background: var(--bar);
+            border-radius: 14px;
+            padding: 16px;
+            display: grid;
+            gap: 10px;
+        }
+
+        #shake-test h1 {
+            font-size: 18px;
+            margin: 0;
+        }
+
+        #shake-test p {
+            margin: 0;
+            color: var(--muted);
+            font-size: 14px;
+        }
+
+        #shake-test .meter {
+            position: relative;
+            height: 28px;
+            margin: 6px 0 22px;
+            border-radius: 6px;
+            background: #0c0c10;
+        }
+
+        #shake-test .fill,
+        #shake-test .peak {
+            position: absolute;
+            left: 0;
+            top: 0;
+            bottom: 0;
+            border-radius: 6px;
+        }
+
+        #shake-test .fill { background: #5b8cff; }
+        #shake-test .peak { width: 3px; background: #fff; border-radius: 0; }
+
+        #shake-test .mark {
+            position: absolute;
+            top: -4px;
+            bottom: -4px;
+            width: 2px;
+            background: var(--muted);
+        }
+
+        #shake-test .mark.on { background: #ffc440; width: 3px; }
+
+        #shake-test .mark span {
+            position: absolute;
+            top: 100%;
+            left: 50%;
+            transform: translateX(-50%);
+            margin-top: 3px;
+            font-size: 11px;
+            color: var(--muted);
+            white-space: nowrap;
+        }
+
+        #shake-test .mark.on span { color: #ffc440; font-weight: 600; }
+
+        #shake-test .levels {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 6px;
+        }
+
+        #shake-test .levels button { height: 40px; font-size: 14px; }
+        #shake-test .levels button.on { background: var(--accent); color: #fff; }
+
+        #shake-test .result {
+            min-height: 1.5em;
+            color: #ffc440;
+            font-weight: 700;
+            font-size: 17px;
+            text-align: center;
+        }
 
         /* Menu */
         #menu {
@@ -315,7 +425,31 @@
         </div>
     </div>
 
-    <div id="nudge"></div>
+    <div id="nudge"><span></span></div>
+
+    <div id="shake-test" data-control>
+        <div class="box">
+            <h1>Shake test</h1>
+            <p>Jolt the phone left, right or up, the way you'd nudge the table. The bar shows how hard; past the yellow
+                line, the table gets nudged. Pick how hard a jolt it should take.</p>
+            <div class="meter">
+                <div class="fill"></div>
+                <div class="peak"></div>
+                <div class="mark" data-level="high"><span>high</span></div>
+                <div class="mark" data-level="medium"><span>medium</span></div>
+                <div class="mark" data-level="low"><span>low</span></div>
+            </div>
+            <div class="levels">
+                <button type="button" data-level="off">Off</button>
+                <button type="button" data-level="low">Low</button>
+                <button type="button" data-level="medium">Medium</button>
+                <button type="button" data-level="high">High</button>
+            </div>
+            <div class="result"></div>
+            <button type="button" data-test="sound">Sound when it nudges: on</button>
+            <button type="button" data-test="done">Done</button>
+        </div>
+    </div>
 
     <div id="files" data-control>
         <div class="box">
@@ -346,6 +480,7 @@
             <button type="button" data-action="sounds">Sound effects on/off</button>
             <button type="button" data-action="music">Music on/off</button>
             <button type="button" data-action="shake" disabled>Shake to nudge</button>
+            <button type="button" data-action="shake-test" disabled>Test the shake</button>
             <button type="button" data-action="fullscreen">Full screen</button>
             <button type="button" data-action="game-menu">Game menu (options, controls) on/off</button>
             <button type="button" data-action="table" hidden>Play Full Tilt Space Cadet</button>
@@ -353,9 +488,9 @@
             <button type="button" data-action="forget-files" hidden>Remove my game files</button>
             <button type="button" data-action="close">Close</button>
             <div class="hint touch-only">Left or right half of the screen: flippers. Hold Launch to pull the
-                plunger, let go to launch. Give the phone a sharp jolt to nudge the table: that edge of the screen
-                lights up (too many and the table tilts!). <i>Shake to nudge</i> sets how hard a jolt it takes, or
-                turns it off.</div>
+                plunger, let go to launch. Give the phone a sharp jolt left, right or up to nudge the table: the screen's
+                border flashes and it thumps (too many and the table tilts!). <i>Test the shake</i> shows how hard a
+                jolt it takes and lets you change it.</div>
         </div>
     </div>
 
@@ -655,6 +790,7 @@
         function isControl(el) { return el && el.closest && el.closest('[data-control]'); }
         app.addEventListener('touchstart', function (e) {
             if (!running) return;
+            unlockAudio();
             if (!isControl(e.target)) askForMotion(); // a tap on the game; the menu item asks for itself
             for (var i = 0; i < e.changedTouches.length; i++) {
                 var t = e.changedTouches[i];
@@ -662,7 +798,7 @@
                 var binding = t.clientX < window.innerWidth / 2 ? Binding.LeftFlipper : Binding.RightFlipper;
                 fingers[t.identifier] = binding;
                 call('web_input', [binding, 1]);
-                if (navigator.vibrate) navigator.vibrate(8);
+                haptic(8);
             }
             if (!isControl(e.target)) {
                 e.preventDefault();
@@ -743,10 +879,47 @@
             }
         }
         var nudgeGlow = document.getElementById('nudge');
+        var nudgeLabels = { left: 'Nudge →', right: '← Nudge', bottom: 'Nudge ↑' }; // which way the table went
         function showNudge(edge) {
+            nudgeGlow.firstChild.textContent = nudgeLabels[edge];
             nudgeGlow.className = 'show ' + edge;
-            requestAnimationFrame(function () { nudgeGlow.className = edge; }); // then fades out
-            if (navigator.vibrate) navigator.vibrate(35);
+            requestAnimationFrame(function () { requestAnimationFrame(function () { nudgeGlow.className = edge; }); }); // then fades out
+            haptic(40);
+            thunk();
+        }
+
+        // Haptics: Android vibrates. iPhones have no vibration for pages, but iOS 18 ticks when a page flips a
+        // switch control, so one hidden switch is flipped instead (a workaround; it may only work from a tap).
+        var iosSwitch = null;
+        function haptic(ms) {
+            if (navigator.vibrate) return navigator.vibrate(ms);
+            if (!iosSwitch) {
+                iosSwitch = document.createElement('label');
+                iosSwitch.setAttribute('aria-hidden', 'true');
+                iosSwitch.style.display = 'none';
+                iosSwitch.innerHTML = '<input type="checkbox" switch>';
+                document.body.appendChild(iosSwitch);
+            }
+            iosSwitch.click();
+        }
+
+        // A short low thump when a shake nudges (Web Audio, nothing to download); it can be turned off in the test
+        var nudgeSound = store('nudgeSound') !== 'off', audio = null;
+        function unlockAudio() { // browsers start audio only from a tap
+            var Ctx = window.AudioContext || window.webkitAudioContext;
+            if (!audio && Ctx) audio = new Ctx();
+            if (audio && audio.state === 'suspended') audio.resume();
+        }
+        function thunk() {
+            if (!nudgeSound || !audio) return;
+            var t = audio.currentTime, osc = audio.createOscillator(), gain = audio.createGain();
+            osc.frequency.setValueAtTime(110, t);
+            osc.frequency.exponentialRampToValueAtTime(40, t + .15);
+            gain.gain.setValueAtTime(.6, t);
+            gain.gain.exponentialRampToValueAtTime(.001, t + .18);
+            osc.connect(gain).connect(audio.destination);
+            osc.start(t);
+            osc.stop(t + .2);
         }
         function askForMotion() {
             if (motionAsked || motion !== 'ask' || shake === 'off') return;
@@ -764,7 +937,7 @@
                 motion = 'yes';
                 setShakeLabel();
             }
-            if (!reading || !running || shake === 'off') return;
+            if (!reading) return;
             if (a && a.x !== null) {
                 x = a.x; y = a.y;
             } else {
@@ -779,27 +952,87 @@
             else if (angle === 180) { sx = -x; sy = -y; }
             else if (angle === 270 || angle === -90) { sx = y; sy = -x; }
 
-            var now = performance.now(), jolt = shakeLevels[shake];
-            if (now - lastNudge < 400) return;
-            var binding = null, edge;
-            if (Math.abs(sx) > jolt && Math.abs(sx) > Math.abs(sy)) {
-                binding = sx > 0 ? Binding.LeftTableBump : Binding.RightTableBump; // pushed right: bumped from the left
-                edge = sx > 0 ? 'left' : 'right';
-            } else if (sy > jolt) {
-                binding = Binding.BottomTableBump;
-                edge = 'bottom';
-            }
-            if (binding === null) return;
+            if (testing) testReading(sx, sy);
+            if (testing || !running || shake === 'off') return;
+
+            var now = performance.now(), nudge = joltDirection(sx, sy, shakeLevels[shake]);
+            if (!nudge || now - lastNudge < 400) return;
             lastNudge = now;
-            showNudge(edge);
-            call('web_input', [binding, 1]);
-            setTimeout(function () { call('web_input', [binding, 0]); }, 120);
+            showNudge(nudge.edge);
+            call('web_input', [nudge.binding, 1]);
+            setTimeout(function () { call('web_input', [nudge.binding, 0]); }, 120);
+        });
+
+        // Left, right or up, whichever is past the trip point (and strongest); pushed right means bumped from the left
+        function joltDirection(sx, sy, jolt) {
+            if (Math.abs(sx) > jolt && Math.abs(sx) > Math.abs(sy))
+                return sx > 0 ? { binding: Binding.LeftTableBump, edge: 'left' } : { binding: Binding.RightTableBump, edge: 'right' };
+            if (sy > jolt)
+                return { binding: Binding.BottomTableBump, edge: 'bottom' };
+            return null;
+        }
+
+        // The shake test: the game pauses; each reading moves the meter, and a jolt past the trip point flashes
+        // as a real nudge would, without bumping the table
+        var testing = false, testPausedGame = false, testPeak = 0, testPeakAt = 0, testLastTrip = 0;
+        var tester = document.getElementById('shake-test'), meterMax = 25;
+        tester.querySelectorAll('.mark').forEach(function (m) {
+            m.style.left = (shakeLevels[m.dataset.level] / meterMax * 100) + '%';
+        });
+        function updateTester() {
+            tester.querySelectorAll('[data-level]').forEach(function (el) {
+                el.classList.toggle('on', el.dataset.level === shake);
+            });
+            tester.querySelector('[data-test="sound"]').textContent = 'Sound when it nudges: ' + (nudgeSound ? 'on' : 'off');
+        }
+        function openTester() {
+            testing = true;
+            testPausedGame = (call('web_game_state') & 7) === 0; // playing, not paused
+            if (testPausedGame) press(Binding.TogglePause, true);
+            tester.querySelector('.result').textContent = '';
+            updateTester();
+            tester.classList.add('open');
+        }
+        function closeTester() {
+            testing = false;
+            tester.classList.remove('open');
+            if (testPausedGame) press(Binding.TogglePause, true);
+        }
+        function testReading(sx, sy) {
+            var strength = Math.max(Math.abs(sx), sy, 0), now = performance.now();
+            if (strength > testPeak || now - testPeakAt > 1500) { testPeak = strength; testPeakAt = now; }
+            tester.querySelector('.fill').style.width = Math.min(strength / meterMax, 1) * 100 + '%';
+            tester.querySelector('.peak').style.left = Math.min(testPeak / meterMax, 1) * 100 + '%';
+            var nudge = shake !== 'off' && joltDirection(sx, sy, shakeLevels[shake]);
+            if (nudge && now - testLastTrip > 400) {
+                testLastTrip = now;
+                showNudge(nudge.edge);
+                tester.querySelector('.result').textContent = nudgeLabels[nudge.edge] + '!';
+            }
+        }
+        tester.addEventListener('click', function (e) {
+            var level = e.target.dataset && e.target.dataset.level, test = e.target.dataset && e.target.dataset.test;
+            unlockAudio();
+            if (level && e.target.tagName === 'BUTTON') {
+                shake = level;
+                store('shake', shake);
+                setShakeLabel();
+            } else if (test === 'sound') {
+                nudgeSound = !nudgeSound;
+                store('nudgeSound', nudgeSound ? 'on' : 'off');
+                if (nudgeSound) thunk();
+            } else if (test === 'done' || e.target === tester) {
+                closeTester();
+                return;
+            }
+            updateTester();
         });
 
         // Menu
         function setShakeLabel() {
             var button = document.querySelector('[data-action="shake"]');
             button.disabled = motion === 'checking' || motion === 'none';
+            document.querySelector('[data-action="shake-test"]').disabled = motion !== 'yes';
             button.textContent = 'Shake to nudge: ' + (
                 motion === 'none' ? 'no motion sensor' :
                 motion === 'checking' ? 'looking for a motion sensor...' :
@@ -846,6 +1079,10 @@
                 })(userData);
                 FS.syncfs(false, function () { location.reload(); });
                 return;
+            }
+            else if (action === 'shake-test') {
+                unlockAudio();
+                openTester();
             }
             else if (action === 'shake') {
                 if (motion === 'ask' && shake !== 'off') { askForMotion(); return; } // iOS: allow it first
