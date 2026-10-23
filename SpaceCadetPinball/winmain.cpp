@@ -192,6 +192,11 @@ int winmain::WinMain(LPCSTR lpCmdLine)
 			resetAllOptions = false;
 			options::ResetAllOptions();
 		}
+		// Which table data to play, when both are there (the web page picks it)
+		if (strstr(lpCmdLine, "-3dpb"))
+			Options.Prefer3DPBGameData = true;
+		else if (strstr(lpCmdLine, "-fulltilt"))
+			Options.Prefer3DPBGameData = false;
 
 		if (!Options.FontFileName.V.empty())
 		{
@@ -792,6 +797,7 @@ void winmain::RenderUi()
 				ImGui::EndMenu();
 			}
 
+#ifndef __EMSCRIPTEN__ // on the web, the page picks the table
 			if (ImGui::BeginMenu("Game Data"))
 			{
 				if (ImGui::MenuItem("Prefer 3DPB Data", nullptr, Options.Prefer3DPBGameData))
@@ -800,6 +806,7 @@ void winmain::RenderUi()
 				}
 				ImGui::EndMenu();
 			}
+#endif
 			ImGui::Separator();
 			if (ImGui::MenuItem("Reset All Options"))
 			{

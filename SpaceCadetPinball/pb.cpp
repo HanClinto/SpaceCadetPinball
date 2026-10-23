@@ -143,19 +143,21 @@ void pb::SelectDatFile(const std::vector<const char*>& dataSearchPaths)
 		"DEMO.DAT",
 	};
 
-	// Default game data test order: CADET.DAT, PINBALL.DAT, DEMO.DAT
+	// Default game data test order: CADET.DAT, PINBALL.DAT, DEMO.DAT.
+	// Each is looked for in every path before the next, so the preferred data wins wherever it is
+	// (the web version can have 3DPB data built in and the player's FT data in the pref path).
 	if (options::Options.Prefer3DPBGameData)
 	{
 		std::swap(datFileNames[0], datFileNames[1]);
 	}
-	for (auto path : dataSearchPaths)
+	for (const auto& datFileName : datFileNames)
 	{
-		if (!path)
-			continue;
-
-		BasePath = path;
-		for (const auto& datFileName : datFileNames)
+		for (auto path : dataSearchPaths)
 		{
+			if (!path)
+				continue;
+
+			BasePath = path;
 			auto fileName = datFileName;
 			for (int i = 0; i < 2; i++)
 			{

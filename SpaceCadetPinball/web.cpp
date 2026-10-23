@@ -35,7 +35,7 @@ extern "C"
 		pb::BindingInput(static_cast<GameBindings>(binding), pressed != 0);
 	}
 
-	// 0: playing, 1: game over, 2: demo; +4 while paused
+	// 0: playing, 1: game over, 2: demo; +4 while paused; +8 with Full Tilt's data (CADET.DAT)
 	EMSCRIPTEN_KEEPALIVE int web_game_state()
 	{
 		int state = pb::game_mode == GameModes::GameOver ? 1 : 0;
@@ -43,6 +43,8 @@ extern "C"
 			state = 2;
 		if (winmain::single_step)
 			state |= 4;
+		if (pb::FullTiltMode)
+			state |= 8;
 		return state;
 	}
 

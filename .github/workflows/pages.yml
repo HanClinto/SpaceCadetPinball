@@ -1,5 +1,6 @@
-# The web version on GitHub Pages (https://hanclinto.github.io/SpaceCadetPinball/). Built without the game's own
-# files, which aren't ours to publish: the page asks each player for their copy and keeps it in their browser.
+# The web version on GitHub Pages (https://hanclinto.github.io/SpaceCadetPinball/), playable right away with the
+# Windows XP game files alula's web build has published since 2021 (taken from its gh-pages branch, which this fork
+# keeps). Nothing else is added: players can add their own Full Tilt! Pinball files in the page's menu.
 name: Web version (GitHub Pages)
 
 on:
@@ -23,6 +24,19 @@ jobs:
     container: emscripten/emsdk:3.1.74
     steps:
       - uses: actions/checkout@v4
+
+      - name: Get the game files from the gh-pages branch (alula's build)
+        uses: actions/checkout@v4
+        with:
+          ref: a93547299a2ed7bd602630c0be3a43648e25a886
+          path: gh-pages
+          sparse-checkout: |
+            SpaceCadetPinball.js
+            SpaceCadetPinball.data
+          sparse-checkout-cone-mode: false
+
+      - name: Unpack them into game_resources
+        run: python3 Platform/Web/unpack_data.py gh-pages/SpaceCadetPinball.js gh-pages/SpaceCadetPinball.data game_resources
 
       - name: Build
         run: |

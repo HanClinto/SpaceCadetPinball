@@ -71,16 +71,38 @@
             width: min(240px, 60vw);
         }
 
-        /* Asking for the game's files, when the build doesn't include them */
+        /* Asking for the game's files: at the start when the build has none, or to add some from the menu */
         #files {
+            position: fixed;
+            inset: 0;
+            z-index: 15;
             display: none;
+            align-items: center;
+            justify-content: center;
+            background: rgba(0, 0, 0, .7);
+        }
+
+        .asking #files {
+            background: #000;
+        }
+
+        #files.open {
+            display: flex;
+        }
+
+        #files .box {
             max-width: 440px;
             padding: 20px;
             text-align: center;
             color: var(--text);
         }
 
-        #files.open {
+        #files [data-mode] {
+            display: none;
+        }
+
+        #files.start [data-mode="start"],
+        #files.add [data-mode="add"] {
             display: block;
         }
 
@@ -247,22 +269,7 @@
     <div id="app">
         <div id="stage">
             <canvas id="canvas" oncontextmenu="event.preventDefault()" tabindex="-1"></canvas>
-            <div id="status"><span id="status-text">Downloading...</span><progress id="progress" hidden></progress>
-                <div id="files" data-control>
-                    <h1>3D Pinball for Windows - Space Cadet</h1>
-                    <p>This page doesn't include the game's own files (the table, sounds and music), which belong to
-                        Microsoft. Copy them from a Windows XP computer, where they're in
-                        <code>C:\Program Files\Windows NT\Pinball</code>, or from a Full Tilt! Pinball CD, and choose
-                        them here. They stay in this browser.</p>
-                    <div class="choose">
-                        <label>Choose the folder<input type="file" id="files-folder" webkitdirectory multiple></label>
-                        <label class="secondary">Choose files or a .zip<input type="file" id="files-pick" multiple></label>
-                    </div>
-                    <p class="small">Or drop them on this page.</p>
-                    <p class="error" id="files-error"></p>
-                    <p><a href="https://github.com/HanClinto/SpaceCadetPinball">About this version</a></p>
-                </div>
-            </div>
+            <div id="status"><span id="status-text">Downloading...</span><progress id="progress" hidden></progress></div>
             <div id="corner">
                 <button type="button" data-control id="corner-scores">High scores</button>
                 <button type="button" data-control id="corner-fullscreen">Full screen</button>
@@ -272,6 +279,27 @@
             <button type="button" data-control id="open-menu" aria-label="Menu">☰</button>
             <button type="button" data-control id="launch">Launch</button>
             <button type="button" data-control id="bar-scores" aria-label="High scores">🏆</button>
+        </div>
+    </div>
+
+    <div id="files" data-control>
+        <div class="box">
+            <h1>3D Pinball for Windows - Space Cadet</h1>
+            <p data-mode="start">This page doesn't include the game's own files (the table, sounds and music), which
+                belong to Microsoft. Copy them from a Windows XP computer, where they're in
+                <code>C:\Program Files\Windows NT\Pinball</code>, or from a Full Tilt! Pinball CD, and choose
+                them here. They stay in this browser.</p>
+            <p data-mode="add">Add the game's files from Windows XP (<code>C:\Program Files\Windows NT\Pinball</code>)
+                or Full Tilt! Pinball (the Space Cadet table's folder: <code>CADET.DAT</code> and its
+                <code>SOUND</code> folder) to play that version too. They stay in this browser.</p>
+            <div class="choose">
+                <label>Choose the folder<input type="file" id="files-folder" webkitdirectory multiple></label>
+                <label class="secondary">Choose files or a .zip<input type="file" id="files-pick" multiple></label>
+            </div>
+            <p class="small">Or drop them here.</p>
+            <p class="error" id="files-error"></p>
+            <p><a href="https://github.com/HanClinto/SpaceCadetPinball">About this version</a>
+                <a href="#" data-mode="add" id="files-cancel" style="margin-left:12px">Cancel</a></p>
         </div>
     </div>
 
@@ -285,7 +313,9 @@
             <button type="button" data-action="shake" class="touch-only">Shake to nudge: on</button>
             <button type="button" data-action="fullscreen">Full screen</button>
             <button type="button" data-action="game-menu">Game menu (options, controls) on/off</button>
-            <button type="button" data-action="forget-files" hidden>Use different game files</button>
+            <button type="button" data-action="table" hidden>Play Full Tilt Space Cadet</button>
+            <button type="button" data-action="add-files">Add game files (Full Tilt, ...)</button>
+            <button type="button" data-action="forget-files" hidden>Remove my game files</button>
             <button type="button" data-action="close">Close</button>
             <div class="hint touch-only">Left or right half of the screen: flippers. Hold Launch to pull the
                 plunger, let go to launch. Give the phone a sharp jolt to nudge the table (too many and it tilts!).</div>
@@ -321,6 +351,16 @@
 
         // Extensions (such as Module.scoreboard, below) can be set on Module before the game's script loads
         var Module = window.Module || {};
+
+        // Which version of the table: XP's (the default) or Full Tilt's (?table=fulltilt), when both are there
+        var tables = { xp: 'XP Space Cadet', fulltilt: 'Full Tilt Space Cadet' };
+        var table = new URLSearchParams(location.search).get('table') === 'fulltilt' ? 'fulltilt' : 'xp';
+        Module.arguments = [table === 'fulltilt' ? '-fulltilt' : '-3dpb'];
+        function playTable(name) {
+            var url = new URL(location.href);
+            if (name === 'xp') url.searchParams.delete('table'); else url.searchParams.set('table', name);
+            Module.syncSettings().then(function () { location.href = url.href; });
+        }
         Module.preRun = Module.preRun || [];
         Module.postRun = Module.postRun || [];
         Module.canvas = document.getElementById('canvas');
@@ -381,40 +421,66 @@
         function hasDataIn(dir) {
             return dataFiles.some(function (f) { return exists(dir + f) || exists(dir + f.toLowerCase()); });
         }
+        function hasFile(name) {
+            return [ '/game_resources/', userData ].some(function (dir) { return exists(dir + name) || exists(dir + name.toLowerCase()); });
+        }
         function hasGameData() {
-            if (hasDataIn('/game_resources/')) return true;
-            var mine = hasDataIn(userData);
-            if (mine) document.querySelector('[data-action="forget-files"]').hidden = false;
-            return mine;
+            if (hasDataIn(userData)) document.querySelector('[data-action="forget-files"]').hidden = false;
+            // Both versions of the table: the menu switches between them
+            if (hasFile('PINBALL.DAT') && hasFile('CADET.DAT')) {
+                var other = table === 'xp' ? 'fulltilt' : 'xp';
+                var button = document.querySelector('[data-action="table"]');
+                button.textContent = 'Play ' + tables[other];
+                button.hidden = false;
+            }
+            return hasDataIn('/game_resources/') || hasDataIn(userData);
         }
 
+        // The files dialog. At the start (no game data) the game waits for it; from the menu ("add"), the page
+        // reloads with the new files, on Full Tilt's table if that's what was added.
+        var filesDialog = document.getElementById('files');
+        var filesMode = null;
         function askForGameData() {
             Module.addRunDependency('gamedata');
             app.classList.add('asking');
-            document.getElementById('files').classList.add('open');
+            openFiles('start');
+        }
+        function openFiles(mode) {
+            filesMode = mode;
+            filesDialog.className = 'open ' + mode;
+            document.getElementById('files-error').textContent = '';
+        }
+        function takeFiles(fileList) {
             var error = document.getElementById('files-error');
-            function take(fileList) {
-                error.textContent = 'Reading...';
-                readGameFiles(Array.prototype.slice.call(fileList)).then(function (found) {
-                    if (!found.some(function (f) { return /\.DAT$/.test(f.name) && dataFiles.indexOf(f.name.split('/').pop()) >= 0; })) {
-                        error.textContent = 'No PINBALL.DAT or CADET.DAT there. Choose the folder the game is in.';
-                        return;
-                    }
-                    storeGameFiles(found);
-                    error.textContent = '';
-                    document.getElementById('files').classList.remove('open');
+            error.textContent = 'Reading...';
+            readGameFiles(Array.prototype.slice.call(fileList)).then(function (found) {
+                var dats = found.map(function (f) { return f.name; }).filter(function (n) { return dataFiles.indexOf(n) >= 0; });
+                if (!dats.length) {
+                    error.textContent = 'No PINBALL.DAT or CADET.DAT there. Choose the folder the game is in.';
+                    return;
+                }
+                storeGameFiles(found);
+                error.textContent = '';
+                if (filesMode === 'start') {
+                    filesDialog.className = '';
                     app.classList.remove('asking');
                     Module.FS.syncfs(false, function () { Module.removeRunDependency('gamedata'); });
-                }).catch(function (e) { error.textContent = 'Could not read those files: ' + e.message; });
-            }
-            document.getElementById('files-folder').addEventListener('change', function (e) { take(e.target.files); });
-            document.getElementById('files-pick').addEventListener('change', function (e) { take(e.target.files); });
-            addEventListener('dragover', function (e) { e.preventDefault(); });
-            addEventListener('drop', function (e) {
-                e.preventDefault();
-                if (!running) take(e.dataTransfer.files);
-            });
+                } else {
+                    playTable(dats.indexOf('CADET.DAT') >= 0 ? 'fulltilt' : 'xp');
+                }
+            }).catch(function (e) { error.textContent = 'Could not read those files: ' + e.message; });
         }
+        document.getElementById('files-folder').addEventListener('change', function (e) { takeFiles(e.target.files); });
+        document.getElementById('files-pick').addEventListener('change', function (e) { takeFiles(e.target.files); });
+        document.getElementById('files-cancel').addEventListener('click', function (e) {
+            e.preventDefault();
+            filesDialog.className = '';
+        });
+        addEventListener('dragover', function (e) { e.preventDefault(); });
+        addEventListener('drop', function (e) {
+            e.preventDefault();
+            if (filesDialog.classList.contains('open')) takeFiles(e.dataTransfer.files);
+        });
 
         // The game's files from what was chosen: loose files, a folder, or .zip files. Names are upper case, as the
         // game asks for them; sounds stay in SOUND/ when they were in one (Full Tilt keeps its sounds there).
@@ -507,6 +573,7 @@
         Module.postRun.push(function () {
             running = true;
             fit();
+            document.title = tables[(call('web_game_state') & 8) ? 'fulltilt' : 'xp'];
             // Phones: the game's own menu bar is too small to tap; the menu here replaces it
             if (touchScreen && store('menuHidden') !== 'no') call('web_show_menu', [0]);
             setInterval(updateLaunch, 250);
@@ -661,6 +728,13 @@
                 var hidden = store('menuHidden') !== 'no';
                 store('menuHidden', hidden ? 'no' : 'yes');
                 call('web_show_menu', [hidden ? 1 : 0]);
+            }
+            else if (action === 'table') {
+                playTable(table === 'xp' ? 'fulltilt' : 'xp');
+                return;
+            }
+            else if (action === 'add-files') {
+                openFiles('add');
             }
             else if (action === 'forget-files') {
                 if (!confirm('Remove the game files from this browser and choose others?')) return;
