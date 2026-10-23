@@ -28,12 +28,13 @@ changes were re-applied on top:
 **Phones and tablets.**
 
 - **Touch**: the left and right halves of the screen are the flippers; hold **Launch** (bottom right) to pull the
-  plunger and let go to launch; after a game it becomes **New game**. 🏆 shows the high scores and ☰ is the menu
-  (new game, pause, sound, music, full screen, the game's own menu bar for its options).
-- **Shake to nudge**: a sharp jolt of the phone left, right or up bumps the table that way, as the nudge keys do
+  plunger and let go to launch; after a game it becomes **New game**. The bar also has ☰, the menu (new game, pause,
+  sound, music, the game's own menu bar for its options), ⛶ full screen and 🏆 the high scores.
+- **Shake to nudge**: a sharp jolt of the device left, right or up bumps the table that way, as the nudge keys do
   (too many and it tilts, as in the original). The edge of the screen it was bumped from lights up, and Android
-  phones buzz. The menu sets how hard a jolt it takes (low, medium, high sensitivity) or turns it off. iOS asks for
-  motion access on the first tap.
+  phones buzz. It works wherever the browser gets motion readings (phones, tablets, laptops with a motion sensor);
+  elsewhere the option is grayed out. The menu sets how hard a jolt it takes (low, medium, high sensitivity) or
+  turns it off. iOS asks for motion access first.
 - **Held upright**, the table fills the width and the score panel sits below it, its logo half and score half side
   by side; the score panel's text boxes follow. On a computer, or a phone held sideways, the layout is the original.
 - **Sharp on high-density screens**: the canvas is drawn at the screen's full resolution, with the game's menus and
@@ -69,9 +70,11 @@ keeps no local table and never asks for a name; instead it calls:
 
 `Module.ccall('web_game_state', 'number', [], [])` says whether a game is being played, is over or is the demo,
 whether it's paused, and which version of the table is loaded (+8 for Full Tilt), so a page can keep a table per
-version. Without `Module.scoreboard` the game keeps its usual high score table in the browser. (The family site's
-scoreboard sends each one-player game to a small service under the signed-in name, and shows personal bests,
-all-time and your own games after each game.)
+version. Without `Module.scoreboard` the game keeps its usual high score table in the browser.
+
+A ready-made one is in [`Platform/Web/scoreboard`](Platform/Web/scoreboard): `scoreboard.js` (the dialog after each
+game, with personal bests, all-time and your own games) and a sample service with nothing to install,
+`python3 Platform/Web/scoreboard/server.py bin`. The family site this fork was made for uses the same `scoreboard.js`.
 
 **For page authors**, `SpaceCadetPinball/web.cpp` lists what a page can call (resize, input by game action, game
 state, high scores, saving settings, the menu bar), and `emscripten_shell.html` is the page that uses them.

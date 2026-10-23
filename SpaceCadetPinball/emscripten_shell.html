@@ -168,7 +168,7 @@
         /* Touch controls */
         #bar {
             display: none;
-            grid-template-columns: 56px 1fr 45%;
+            grid-template-columns: 56px 56px 1fr 45%;
             gap: 10px;
             align-items: center;
             padding: 8px 12px calc(8px + env(safe-area-inset-bottom));
@@ -193,6 +193,11 @@
         button.pressed,
         button:active {
             background: var(--button-active);
+        }
+
+        button:disabled {
+            opacity: .45;
+            cursor: default;
         }
 
         #bar-scores {
@@ -297,12 +302,14 @@
             <canvas id="canvas" oncontextmenu="event.preventDefault()" tabindex="-1"></canvas>
             <div id="status"><span id="status-text">Downloading...</span><progress id="progress" hidden></progress></div>
             <div id="corner">
+                <button type="button" data-control id="corner-menu">Menu</button>
                 <button type="button" data-control id="corner-scores">High scores</button>
                 <button type="button" data-control id="corner-fullscreen">Full screen</button>
             </div>
         </div>
         <div id="bar">
             <button type="button" data-control id="open-menu" aria-label="Menu">☰</button>
+            <button type="button" data-control id="bar-fullscreen" aria-label="Full screen">⛶</button>
             <button type="button" data-control id="bar-scores" aria-label="High scores">🏆</button>
             <button type="button" data-control id="launch">Launch</button>
         </div>
@@ -338,7 +345,7 @@
             <button type="button" data-action="scores">High scores</button>
             <button type="button" data-action="sounds">Sound effects on/off</button>
             <button type="button" data-action="music">Music on/off</button>
-            <button type="button" data-action="shake" class="touch-only">Shake to nudge: medium</button>
+            <button type="button" data-action="shake" disabled>Shake to nudge</button>
             <button type="button" data-action="fullscreen">Full screen</button>
             <button type="button" data-action="game-menu">Game menu (options, controls) on/off</button>
             <button type="button" data-action="table" hidden>Play Full Tilt Space Cadet</button>
@@ -632,17 +639,23 @@
             else
                 (el.requestFullscreen || el.webkitRequestFullscreen).call(el);
         };
-        if (!canFullscreen) {
-            document.getElementById('corner-fullscreen').style.display = 'none';
-            document.querySelector('[data-action="fullscreen"]').style.display = 'none';
-        }
+        // Without it (iPhones), its buttons are grayed out; Add to Home Screen gets close there
+        ['corner-fullscreen', 'bar-fullscreen'].forEach(function (id) {
+            var button = document.getElementById(id);
+            button.disabled = !canFullscreen;
+            if (!canFullscreen) button.title = 'This browser can\'t show a page full screen';
+            button.addEventListener('click', function () { Module.toggleFullscreen(); });
+        });
+        var menuFullscreen = document.querySelector('[data-action="fullscreen"]');
+        menuFullscreen.disabled = !canFullscreen;
+        if (!canFullscreen) menuFullscreen.textContent = 'Full screen (not in this browser)';
 
         // Touch: each finger on the game is a flipper, by which half of the screen it's on
         var fingers = {};
         function isControl(el) { return el && el.closest && el.closest('[data-control]'); }
         app.addEventListener('touchstart', function (e) {
             if (!running) return;
-            askForMotion();
+            if (!isControl(e.target)) askForMotion(); // a tap on the game; the menu item asks for itself
             for (var i = 0; i < e.changedTouches.length; i++) {
                 var t = e.changedTouches[i];
                 if (isControl(t.target)) continue;
@@ -709,6 +722,26 @@
         var shake = store('shake');
         if (!(shake in shakeLevels)) shake = shake === 'off' ? 'off' : 'medium'; // 'on' before there were levels
         var lastNudge = 0, gravity = null, motionAsked = false;
+
+        // Is there a motion sensor? Browsers have the API with or without one, so only real readings tell (phones,
+        // tablets, some laptops). Some browsers send none until they're allowed to: Chrome allows it when asked,
+        // iOS only when asked from a tap ('ask': the menu item asks).
+        var motion = window.DeviceMotionEvent ? 'checking' : 'none'; // then 'yes', 'ask' or 'none'
+        function lookForReadings() {
+            setTimeout(function () {
+                if (motion === 'checking') { motion = 'none'; setShakeLabel(); }
+            }, 3000);
+        }
+        if (motion === 'checking') {
+            lookForReadings();
+            if (typeof DeviceMotionEvent.requestPermission === 'function') {
+                DeviceMotionEvent.requestPermission().then(function (answer) {
+                    if (answer !== 'granted' && motion === 'checking') { motion = 'none'; setShakeLabel(); }
+                }).catch(function () {
+                    if (motion === 'checking') { motion = 'ask'; setShakeLabel(); } // needs a tap
+                });
+            }
+        }
         var nudgeGlow = document.getElementById('nudge');
         function showNudge(edge) {
             nudgeGlow.className = 'show ' + edge;
@@ -716,21 +749,26 @@
             if (navigator.vibrate) navigator.vibrate(35);
         }
         function askForMotion() {
-            if (motionAsked || shake === 'off') return;
+            if (motionAsked || motion !== 'ask' || shake === 'off') return;
             motionAsked = true;
-            // iOS asks the player first, and only from a tap
-            if (window.DeviceMotionEvent && typeof DeviceMotionEvent.requestPermission === 'function')
-                DeviceMotionEvent.requestPermission().catch(function () { });
+            DeviceMotionEvent.requestPermission().then(function (answer) {
+                motion = answer === 'granted' ? 'checking' : 'none';
+                setShakeLabel();
+                if (motion === 'checking') lookForReadings();
+            }).catch(function () { motionAsked = false; });
         }
         addEventListener('devicemotion', function (e) {
-            if (!running || shake === 'off') return;
-            var x, y, a = e.acceleration;
+            var x, y, a = e.acceleration, g = e.accelerationIncludingGravity;
+            var reading = (a && a.x !== null) || (g && g.x !== null);
+            if (reading && motion !== 'yes') {
+                motion = 'yes';
+                setShakeLabel();
+            }
+            if (!reading || !running || shake === 'off') return;
             if (a && a.x !== null) {
                 x = a.x; y = a.y;
             } else {
                 // No gravity-free reading: take gravity out with a slow average
-                var g = e.accelerationIncludingGravity;
-                if (!g || g.x === null) return;
                 gravity = gravity ? { x: gravity.x * .9 + g.x * .1, y: gravity.y * .9 + g.y * .1 } : { x: g.x, y: g.y };
                 x = g.x - gravity.x; y = g.y - gravity.y;
             }
@@ -760,14 +798,19 @@
 
         // Menu
         function setShakeLabel() {
-            document.querySelector('[data-action="shake"]').textContent = 'Shake to nudge: ' +
-                (shake === 'off' ? 'off' : shake + ' sensitivity');
+            var button = document.querySelector('[data-action="shake"]');
+            button.disabled = motion === 'checking' || motion === 'none';
+            button.textContent = 'Shake to nudge: ' + (
+                motion === 'none' ? 'no motion sensor' :
+                motion === 'checking' ? 'looking for a motion sensor...' :
+                motion === 'ask' && shake !== 'off' ? 'tap to allow motion access' :
+                shake === 'off' ? 'off' : shake + ' sensitivity');
         }
         setShakeLabel();
         document.getElementById('open-menu').addEventListener('click', function () { menu.classList.add('open'); });
         document.getElementById('bar-scores').addEventListener('click', function () { call('web_show_high_scores'); });
         document.getElementById('corner-scores').addEventListener('click', function () { call('web_show_high_scores'); });
-        document.getElementById('corner-fullscreen').addEventListener('click', function () { Module.toggleFullscreen(); });
+        document.getElementById('corner-menu').addEventListener('click', function () { menu.classList.add('open'); });
         menu.addEventListener('click', function (e) {
             var action = e.target.getAttribute && e.target.getAttribute('data-action');
             if (e.target === menu) action = 'close';
@@ -805,6 +848,7 @@
                 return;
             }
             else if (action === 'shake') {
+                if (motion === 'ask' && shake !== 'off') { askForMotion(); return; } // iOS: allow it first
                 shake = shakeOrder[(shakeOrder.indexOf(shake) + 1) % shakeOrder.length];
                 store('shake', shake);
                 setShakeLabel();
