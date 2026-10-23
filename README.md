@@ -2,52 +2,85 @@
 
 # SpaceCadetPinball
 
-## Summary
-
-Reverse engineering of `3D Pinball for Windows - Space Cadet`, a game bundled with Windows.
-
-## How to play
-
-Place compiled executable into a folder containing original game resources (not included).\
-Supports data files from Windows and Full Tilt versions of the game.
-
-## Web version (this fork)
+## This fork: the web version, playable on phones
 
 **Play it: <https://hanclinto.github.io/SpaceCadetPinball/>**, on a computer or a phone.
 
-This fork is the [Emscripten port by alula](https://github.com/alula/SpaceCadetPinball) brought up to upstream v2.1,
-with play on phones and a hook for sharing high scores:
+This fork takes [alula's Emscripten port](https://github.com/alula/SpaceCadetPinball) (2021), brings it up to the
+decompilation's upstream v2.1, and makes it a game you can play on a phone. It was made for a family game site,
+where everyone shares one high score table, and the hook for that is part of the fork, usable by any page.
 
-- **Upstream v2.1**: all the gameplay fixes, volume controls, key and controller remapping, translations.
-- **Phones and tablets**: the left and right halves of the screen are the flippers; hold *Launch* to pull the
-  plunger. Give the phone a sharp jolt left, right or up to nudge the table (iOS asks for motion access on the
-  first tap). Held upright, the table fills the width and the score panel sits below it.
-- **Smooth on any screen**: the game updates at a fixed rate (120 per second, as on the desktop) and draws once
-  per browser frame, on 60 Hz and 120 Hz screens alike.
-- **Settings persist** in the browser (IndexedDB).
-- **Two versions of the table**: XP Space Cadet (Windows XP's) and Full Tilt Space Cadet (Full Tilt! Pinball's:
-  higher resolution art, multiball, three music tracks). The menu switches between them when both are there; the
-  page's address picks one (`?table=fulltilt`; XP's otherwise).
-- **Game files**: the GitHub Pages version includes the Windows XP files that alula's web build has published since
-  2021 (the workflow takes them from this fork's `gh-pages` branch, that build). For Full Tilt Space Cadet, add your own
-  copy with *Add game files* in the menu: the table's folder (`CADET.DAT` and its `SOUND` folder), its files, or a
-  .zip. A build without any game files asks for them at the start. Added files stay in the browser. The game's files
-  belong to Microsoft and Maxis; none are in this repository's source.
-- **Shared high scores** (optional): a page can set `Module.scoreboard` before the game's script loads. The game then
-  keeps no local table; instead it calls
-  - `onTableNeeded()` when it wants the top 5, which the page passes back with
-    `Module.ccall('web_set_high_score', null, ['number', 'string', 'number'], [position, name, score])`
-    (also any time later, e.g. when someone else sets a new record),
-  - `submit({scores, players, cheated})` when a game ends (`scores` per player; `cheated` is true if any cheat was
-    on, including ones that outlast the game they were typed in), and
-  - `show()` for *Game > High Scores*.
+### What this fork changes
 
-  Without `Module.scoreboard` the game keeps its usual high score table in the browser.
+**Brought up to upstream v2.1.** alula's port was built on the decompilation as it stood in September 2021; upstream
+([k4zmu2a/SpaceCadetPinball](https://github.com/k4zmu2a/SpaceCadetPinball)) has 190 commits since. They're merged
+in: gameplay fixes (mission scores, wormhole lights, flipper animation, hard-hit detection, plunger), volume
+controls, stereo sound, key and game controller remapping, translations, and Full Tilt! Pinball support. alula's web
+changes were re-applied on top:
+
+- **Music** through TinySoundFont (SDL_mixer has no MIDI synthesizer in the browser), behind upstream's new
+  multi-track music code, so Full Tilt's three tracks play too. Desktop builds keep SDL_mixer, as upstream.
+- **A main loop for the browser.** The desktop game sleeps between updates; a page can't. Each browser frame
+  (requestAnimationFrame) runs as many fixed-length updates as the time since the last one calls for, 120 per
+  second as on the desktop, and draws once. The same physics on 60 Hz and 120 Hz screens; alula's version ran one
+  update per 60 Hz timer tick, which made it choppy.
+
+**Phones and tablets.**
+
+- **Touch**: the left and right halves of the screen are the flippers; hold **Launch** (bottom right) to pull the
+  plunger and let go to launch; after a game it becomes **New game**. 🏆 shows the high scores and ☰ is the menu
+  (new game, pause, sound, music, full screen, the game's own menu bar for its options).
+- **Shake to nudge**: a sharp jolt of the phone left, right or up bumps the table that way, as the nudge keys do
+  (too many and it tilts, as in the original). The edge of the screen it was bumped from lights up, and Android
+  phones buzz. The menu sets how hard a jolt it takes (low, medium, high sensitivity) or turns it off. iOS asks for
+  motion access on the first tap.
+- **Held upright**, the table fills the width and the score panel sits below it, its logo half and score half side
+  by side; the score panel's text boxes follow. On a computer, or a phone held sideways, the layout is the original.
+- **Sharp on high-density screens**: the canvas is drawn at the screen's full resolution, with the game's menus and
+  dialogs scaled to stay readable.
+
+**Two versions of the table.** XP Space Cadet (Windows XP's) and Full Tilt Space Cadet (the original Full Tilt!
+Pinball edition: higher resolution art, multiball, jackpots, three music tracks). The page's address picks one
+(`?table=fulltilt`, XP's otherwise) and the menu switches when both are there. The game now looks for the chosen
+version's data in every folder before falling back to the other, so built-in XP files don't hide Full Tilt files
+a player added.
+
+**Game files.** They belong to Microsoft and Maxis, and none are in this repository's source.
+
+- The GitHub Pages version includes the Windows XP files that alula's web build has published since 2021: the
+  workflow (`.github/workflows/pages.yml`) takes them from this fork's `gh-pages` branch, which is that build, at
+  a fixed commit.
+- Players can add their own copy with **Add game files** in the menu, for instance Full Tilt! Pinball's Space Cadet
+  folder (`CADET.DAT` and its `SOUND` folder): the folder, its files, or a .zip. Added files stay in the browser.
+- A build without any game files asks for them before it starts.
+
+**Settings persist** in the browser (IndexedDB): the desktop game writes them when it exits, which a page never
+does, so the page saves them every few seconds and whenever it's hidden or closed.
+
+**Shared high scores (optional).** A page can set `Module.scoreboard` before the game's script loads. The game then
+keeps no local table and never asks for a name; instead it calls:
+
+- `onTableNeeded()` when it wants the top 5; the page passes them back (then or any time later, e.g. when someone
+  else sets a record) with `Module.ccall('web_set_high_score', null, ['number', 'string', 'number'], [position, name,
+  score])`. The game uses them for its "High Score 1-5" messages and to say a game made the table.
+- `submit({scores, players, cheated})` when a game ends: the score per player, and whether any cheat was on,
+  including the ones that outlast the game they were typed in (easy mode, unlimited balls).
+- `show()` for *Game > High Scores*.
+
+`Module.ccall('web_game_state', 'number', [], [])` says whether a game is being played, is over or is the demo,
+whether it's paused, and which version of the table is loaded (+8 for Full Tilt), so a page can keep a table per
+version. Without `Module.scoreboard` the game keeps its usual high score table in the browser. (The family site's
+scoreboard sends each one-player game to a small service under the signed-in name, and shows personal bests,
+all-time and your own games after each game.)
+
+**For page authors**, `SpaceCadetPinball/web.cpp` lists what a page can call (resize, input by game action, game
+state, high scores, saving settings, the menu bar), and `emscripten_shell.html` is the page that uses them.
 
 ### Building
 
-To include the game's files in the build, put them (everything but the .exe) in `game_resources/`; leave it empty
-for a page that asks for them. Then, with the [Emscripten SDK](https://emscripten.org) (tested with 3.1.74):
+To include the game's files in the build, put them (everything but the .exe) in `game_resources/`: Windows XP's at
+the top, and for Full Tilt, `CADET.DAT` with its `SOUND` folder. Leave it empty for a page that asks for them. Then,
+with the [Emscripten SDK](https://emscripten.org) (tested with 3.1.74):
 
 ```sh
 emcmake cmake -B build -DCMAKE_BUILD_TYPE=Release
@@ -56,7 +89,22 @@ cmake --build build
 
 or without installing it: `docker run --rm -v "$PWD":/src -w /src emscripten/emsdk:3.1.74 sh -c "emcmake cmake -B build
 -DCMAKE_BUILD_TYPE=Release && cmake --build build"`. The page is `bin/SpaceCadetPinball.html`, next to its `.js`,
-`.wasm` and `.data`; serve the folder over HTTP.
+`.wasm` and `.data`; serve the folder over HTTP. `Platform/Web/unpack_data.py` unpacks another web build's `.data`
+into a folder, which is how the Pages workflow gets its files. Desktop builds are unchanged from upstream.
+
+---
+
+*The rest is upstream's README, about the decompilation itself.*
+
+
+## Summary
+
+Reverse engineering of `3D Pinball for Windows - Space Cadet`, a game bundled with Windows.
+
+## How to play
+
+Place compiled executable into a folder containing original game resources (not included).\
+Supports data files from Windows and Full Tilt versions of the game.
 
 ## Known source ports
 

@@ -168,7 +168,7 @@
         /* Touch controls */
         #bar {
             display: none;
-            grid-template-columns: 56px 1fr 56px;
+            grid-template-columns: 56px 1fr 45%;
             gap: 10px;
             align-items: center;
             padding: 8px 12px calc(8px + env(safe-area-inset-bottom));
@@ -193,6 +193,11 @@
         button.pressed,
         button:active {
             background: var(--button-active);
+        }
+
+        #bar-scores {
+            justify-self: center;
+            width: 56px;
         }
 
         #launch {
@@ -225,6 +230,25 @@
             background: rgba(42, 42, 53, .85);
         }
 
+        /* Shake to nudge: the edge the table was bumped from lights up */
+        #nudge {
+            position: fixed;
+            inset: 0;
+            pointer-events: none;
+            z-index: 5;
+            opacity: 0;
+            transition: opacity .35s ease-out;
+        }
+
+        #nudge.show {
+            opacity: 1;
+            transition: none;
+        }
+
+        #nudge.left { box-shadow: inset 28px 0 24px -12px rgba(255, 196, 64, .9); }
+        #nudge.right { box-shadow: inset -28px 0 24px -12px rgba(255, 196, 64, .9); }
+        #nudge.bottom { box-shadow: inset 0 -28px 24px -12px rgba(255, 196, 64, .9); }
+
         /* Menu */
         #menu {
             position: fixed;
@@ -247,6 +271,8 @@
             padding: 8px 12px calc(12px + env(safe-area-inset-bottom));
             display: grid;
             gap: 8px;
+            max-height: 100%;
+            overflow-y: auto;
         }
 
         .touch-only {
@@ -277,10 +303,12 @@
         </div>
         <div id="bar">
             <button type="button" data-control id="open-menu" aria-label="Menu">☰</button>
-            <button type="button" data-control id="launch">Launch</button>
             <button type="button" data-control id="bar-scores" aria-label="High scores">🏆</button>
+            <button type="button" data-control id="launch">Launch</button>
         </div>
     </div>
+
+    <div id="nudge"></div>
 
     <div id="files" data-control>
         <div class="box">
@@ -310,7 +338,7 @@
             <button type="button" data-action="scores">High scores</button>
             <button type="button" data-action="sounds">Sound effects on/off</button>
             <button type="button" data-action="music">Music on/off</button>
-            <button type="button" data-action="shake" class="touch-only">Shake to nudge: on</button>
+            <button type="button" data-action="shake" class="touch-only">Shake to nudge: medium</button>
             <button type="button" data-action="fullscreen">Full screen</button>
             <button type="button" data-action="game-menu">Game menu (options, controls) on/off</button>
             <button type="button" data-action="table" hidden>Play Full Tilt Space Cadet</button>
@@ -318,7 +346,9 @@
             <button type="button" data-action="forget-files" hidden>Remove my game files</button>
             <button type="button" data-action="close">Close</button>
             <div class="hint touch-only">Left or right half of the screen: flippers. Hold Launch to pull the
-                plunger, let go to launch. Give the phone a sharp jolt to nudge the table (too many and it tilts!).</div>
+                plunger, let go to launch. Give the phone a sharp jolt to nudge the table: that edge of the screen
+                lights up (too many and the table tilts!). <i>Shake to nudge</i> sets how hard a jolt it takes, or
+                turns it off.</div>
         </div>
     </div>
 
@@ -347,7 +377,7 @@
         }
 
         var touchScreen = matchMedia('(pointer: coarse)').matches || navigator.maxTouchPoints > 0;
-        if (touchScreen) app.classList.add('touch');
+        if (touchScreen) document.documentElement.classList.add('touch');
 
         // Extensions (such as Module.scoreboard, below) can be set on Module before the game's script loads
         var Module = window.Module || {};
@@ -385,9 +415,18 @@
             statusBox.style.display = text ? '' : 'none';
         };
         Module.totalDependencies = 0;
+        var checkingData = false;
         Module.monitorRunDependencies = function (left) {
             this.totalDependencies = Math.max(this.totalDependencies, left);
             Module.setStatus(left ? 'Preparing... (' + (this.totalDependencies - left) + '/' + this.totalDependencies + ')' : '');
+            // Only our 'gamedata' left: the settings, the engine and any built-in game files are all in
+            if (checkingData && left === 1) {
+                checkingData = false;
+                setTimeout(function () {
+                    if (hasGameData()) Module.removeRunDependency('gamedata');
+                    else askForGameData();
+                });
+            }
         };
         window.onerror = function () {
             Module.setStatus('Something went wrong; see the browser console');
@@ -406,9 +445,10 @@
             FS.mkdir('/libsdl');
             FS.mount(FS.filesystems.IDBFS, {}, '/libsdl');
             Module.addRunDependency('settings');
+            Module.addRunDependency('gamedata'); // until it's clear there's game data (monitorRunDependencies)
+            checkingData = true;
             FS.syncfs(true, function (err) {
                 if (err) console.warn('Could not load settings', err);
-                if (!hasGameData()) askForGameData();
                 Module.removeRunDependency('settings');
             });
         });
@@ -441,7 +481,6 @@
         var filesDialog = document.getElementById('files');
         var filesMode = null;
         function askForGameData() {
-            Module.addRunDependency('gamedata');
             app.classList.add('asking');
             openFiles('start');
         }
@@ -663,18 +702,28 @@
         launch.addEventListener('pointerup', plungerUp);
         launch.addEventListener('pointercancel', plungerUp);
 
-        // Shake to nudge: a sharp jolt left, right or up bumps the table that way
-        var shakeOn = store('shake') !== 'off';
+        // Shake to nudge: a sharp jolt left, right or up bumps the table that way. How sharp: the sensitivity
+        // (m/s² without gravity; holding the phone and walking stay under 3).
+        var shakeLevels = { off: null, low: 18, medium: 12, high: 8 };
+        var shakeOrder = ['off', 'low', 'medium', 'high'];
+        var shake = store('shake');
+        if (!(shake in shakeLevels)) shake = shake === 'off' ? 'off' : 'medium'; // 'on' before there were levels
         var lastNudge = 0, gravity = null, motionAsked = false;
+        var nudgeGlow = document.getElementById('nudge');
+        function showNudge(edge) {
+            nudgeGlow.className = 'show ' + edge;
+            requestAnimationFrame(function () { nudgeGlow.className = edge; }); // then fades out
+            if (navigator.vibrate) navigator.vibrate(35);
+        }
         function askForMotion() {
-            if (motionAsked || !shakeOn) return;
+            if (motionAsked || shake === 'off') return;
             motionAsked = true;
             // iOS asks the player first, and only from a tap
             if (window.DeviceMotionEvent && typeof DeviceMotionEvent.requestPermission === 'function')
                 DeviceMotionEvent.requestPermission().catch(function () { });
         }
         addEventListener('devicemotion', function (e) {
-            if (!running || !shakeOn) return;
+            if (!running || shake === 'off') return;
             var x, y, a = e.acceleration;
             if (a && a.x !== null) {
                 x = a.x; y = a.y;
@@ -692,22 +741,27 @@
             else if (angle === 180) { sx = -x; sy = -y; }
             else if (angle === 270 || angle === -90) { sx = y; sy = -x; }
 
-            var now = performance.now(), jolt = 12; // m/s², a firm flick; holding and walking stay under 3
+            var now = performance.now(), jolt = shakeLevels[shake];
             if (now - lastNudge < 400) return;
-            var binding = null;
-            if (Math.abs(sx) > jolt && Math.abs(sx) > Math.abs(sy))
+            var binding = null, edge;
+            if (Math.abs(sx) > jolt && Math.abs(sx) > Math.abs(sy)) {
                 binding = sx > 0 ? Binding.LeftTableBump : Binding.RightTableBump; // pushed right: bumped from the left
-            else if (sy > jolt)
+                edge = sx > 0 ? 'left' : 'right';
+            } else if (sy > jolt) {
                 binding = Binding.BottomTableBump;
+                edge = 'bottom';
+            }
             if (binding === null) return;
             lastNudge = now;
+            showNudge(edge);
             call('web_input', [binding, 1]);
             setTimeout(function () { call('web_input', [binding, 0]); }, 120);
         });
 
         // Menu
         function setShakeLabel() {
-            document.querySelector('[data-action="shake"]').textContent = 'Shake to nudge: ' + (shakeOn ? 'on' : 'off');
+            document.querySelector('[data-action="shake"]').textContent = 'Shake to nudge: ' +
+                (shake === 'off' ? 'off' : shake + ' sensitivity');
         }
         setShakeLabel();
         document.getElementById('open-menu').addEventListener('click', function () { menu.classList.add('open'); });
@@ -751,8 +805,8 @@
                 return;
             }
             else if (action === 'shake') {
-                shakeOn = !shakeOn;
-                store('shake', shakeOn ? 'on' : 'off');
+                shake = shakeOrder[(shakeOrder.indexOf(shake) + 1) % shakeOrder.length];
+                store('shake', shake);
                 setShakeLabel();
                 askForMotion();
                 return;
