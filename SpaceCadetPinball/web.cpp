@@ -35,7 +35,8 @@ extern "C"
 		pb::BindingInput(static_cast<GameBindings>(binding), pressed != 0);
 	}
 
-	// 0: playing, 1: game over, 2: demo; +4 while paused; +8 with Full Tilt's data (CADET.DAT)
+	// 0: playing, 1: game over, 2: demo; +4 while paused; +8 with Full Tilt's data (CADET.DAT);
+	// +16 sound effects on, +32 music on, +64 the game's menu bar shown
 	EMSCRIPTEN_KEEPALIVE int web_game_state()
 	{
 		int state = pb::game_mode == GameModes::GameOver ? 1 : 0;
@@ -45,6 +46,12 @@ extern "C"
 			state |= 4;
 		if (pb::FullTiltMode)
 			state |= 8;
+		if (options::Options.Sounds)
+			state |= 16;
+		if (options::Options.Music)
+			state |= 32;
+		if (options::Options.ShowMenu)
+			state |= 64;
 		return state;
 	}
 

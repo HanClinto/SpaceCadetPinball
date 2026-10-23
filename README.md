@@ -28,14 +28,16 @@ changes were re-applied on top:
 **Phones and tablets.**
 
 - **Touch**: the left and right halves of the screen are the flippers; hold **Launch** (bottom right) to pull the
-  plunger and let go to launch; after a game it becomes **New game**. The bar also has ☰, the menu (new game, pause,
-  sound, music, the game's own menu bar for its options), ⛶ full screen and 🏆 the high scores.
+  plunger and let go to launch; after a game it becomes **New game**. The bar also has ☰, the menu, ⛶ full screen
+  and 🏆 the high scores. In the menu, actions are buttons (New game, Pause or Resume, High scores) and settings show
+  what they're set to: switches for sound effects, music, full screen and the game's own menu bar (its options), and
+  the jolt Shake to nudge takes.
 - **Shake to nudge**: a sharp jolt of the device left, right or up bumps the table that way, as the nudge keys do
   (too many and it tilts, as in the original). Each nudge flashes the screen's border, heaviest on the edge it was
   bumped from, with a label saying which way the table went, plays a short thump, and buzzes Android phones (iPhones
-  get a haptic tick where iOS allows it, through a switch-control workaround). **Test the shake** in the menu shows
-  a live meter of how hard you're jolting against the low, medium and high trip points, flashes when a jolt would
-  nudge, and sets the sensitivity (or off) and the sound; the game pauses meanwhile. It works wherever the browser
+  get a haptic tick where iOS allows it, through a switch-control workaround). **Shake to nudge** in the menu shows
+  a live meter of how hard you're jolting against the gentle, firm and hard trip points, flashes when a jolt would
+  nudge, and sets how hard a jolt it takes (or off) and the thump; the game pauses meanwhile. It works wherever the browser
   gets motion readings (phones, tablets, laptops with a motion sensor); elsewhere it's grayed out. iOS asks for
   motion access first.
 - **Held upright**, the table fills the width and the score panel sits below it, its logo half and score half side

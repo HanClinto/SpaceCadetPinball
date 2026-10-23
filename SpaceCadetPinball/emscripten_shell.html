@@ -356,6 +356,10 @@
         #shake-test .levels button { height: 40px; font-size: 14px; }
         #shake-test .levels button.on { background: var(--accent); color: #fff; }
 
+        #shake-test .row {
+            padding: 0 16px;
+        }
+
         #shake-test .result {
             min-height: 1.5em;
             color: #ffc440;
@@ -398,6 +402,61 @@
             display: block;
         }
 
+        #menu .sheet button {
+            text-align: left;
+            padding: 0 16px;
+        }
+
+        .row {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 12px;
+        }
+
+        #menu .row small {
+            color: var(--muted);
+        }
+
+        #menu .row .value {
+            color: var(--muted);
+        }
+
+        #menu .row .value::after {
+            content: " ›";
+        }
+
+        /* An on/off switch: on is blue with the knob on the right */
+        .switch {
+            position: relative;
+            flex: none;
+            width: 44px;
+            height: 26px;
+            border-radius: 13px;
+            background: #4a4a58;
+            transition: background .15s;
+        }
+
+        .switch::after {
+            content: "";
+            position: absolute;
+            top: 3px;
+            left: 3px;
+            width: 20px;
+            height: 20px;
+            border-radius: 50%;
+            background: #fff;
+            transition: transform .15s;
+        }
+
+        [aria-checked="true"] .switch {
+            background: var(--accent);
+        }
+
+        [aria-checked="true"] .switch::after {
+            transform: translateX(18px);
+        }
+
         #menu .hint {
             color: var(--muted);
             font-size: 13px;
@@ -429,24 +488,25 @@
 
     <div id="shake-test" data-control>
         <div class="box">
-            <h1>Shake test</h1>
+            <h1>Shake to nudge</h1>
             <p>Jolt the phone left, right or up, the way you'd nudge the table. The bar shows how hard; past the yellow
-                line, the table gets nudged. Pick how hard a jolt it should take.</p>
+                line, the table gets nudged. How hard a jolt should it take?</p>
             <div class="meter">
                 <div class="fill"></div>
                 <div class="peak"></div>
-                <div class="mark" data-level="high"><span>high</span></div>
-                <div class="mark" data-level="medium"><span>medium</span></div>
-                <div class="mark" data-level="low"><span>low</span></div>
+                <div class="mark" data-level="gentle"><span>gentle</span></div>
+                <div class="mark" data-level="firm"><span>firm</span></div>
+                <div class="mark" data-level="hard"><span>hard</span></div>
             </div>
             <div class="levels">
                 <button type="button" data-level="off">Off</button>
-                <button type="button" data-level="low">Low</button>
-                <button type="button" data-level="medium">Medium</button>
-                <button type="button" data-level="high">High</button>
+                <button type="button" data-level="gentle">Gentle</button>
+                <button type="button" data-level="firm">Firm</button>
+                <button type="button" data-level="hard">Hard</button>
             </div>
             <div class="result"></div>
-            <button type="button" data-test="sound">Sound when it nudges: on</button>
+            <button type="button" class="row" data-test="sound" role="switch" aria-checked="true">
+                <span>Thump when it nudges</span><i class="switch"></i></button>
             <button type="button" data-test="done">Done</button>
         </div>
     </div>
@@ -475,21 +535,25 @@
     <div id="menu" data-control>
         <div class="sheet">
             <button type="button" data-action="new-game">New game</button>
-            <button type="button" data-action="pause">Pause / resume</button>
+            <button type="button" data-action="pause">Pause</button>
             <button type="button" data-action="scores">High scores</button>
-            <button type="button" data-action="sounds">Sound effects on/off</button>
-            <button type="button" data-action="music">Music on/off</button>
-            <button type="button" data-action="shake" disabled>Shake to nudge</button>
-            <button type="button" data-action="shake-test" disabled>Test the shake</button>
-            <button type="button" data-action="fullscreen">Full screen</button>
-            <button type="button" data-action="game-menu">Game menu (options, controls) on/off</button>
+            <button type="button" class="row" data-action="sounds" role="switch" aria-checked="false">
+                <span>Sound effects</span><i class="switch"></i></button>
+            <button type="button" class="row" data-action="music" role="switch" aria-checked="false">
+                <span>Music</span><i class="switch"></i></button>
+            <button type="button" class="row" data-action="shake" disabled>
+                <span>Shake to nudge</span><span class="value"></span></button>
+            <button type="button" class="row" data-action="fullscreen" role="switch" aria-checked="false">
+                <span>Full screen</span><i class="switch"></i></button>
+            <button type="button" class="row" data-action="game-menu" role="switch" aria-checked="false">
+                <span>Game menu bar <small>(options, controls)</small></span><i class="switch"></i></button>
             <button type="button" data-action="table" hidden>Play Full Tilt Space Cadet</button>
             <button type="button" data-action="add-files">Add game files (Full Tilt, ...)</button>
             <button type="button" data-action="forget-files" hidden>Remove my game files</button>
             <button type="button" data-action="close">Close</button>
             <div class="hint touch-only">Left or right half of the screen: flippers. Hold Launch to pull the
                 plunger, let go to launch. Give the phone a sharp jolt left, right or up to nudge the table: the screen's
-                border flashes and it thumps (too many and the table tilts!). <i>Test the shake</i> shows how hard a
+                border flashes and it thumps (too many and the table tilts!). <i>Shake to nudge</i> shows how hard a
                 jolt it takes and lets you change it.</div>
         </div>
     </div>
@@ -853,10 +917,11 @@
 
         // Shake to nudge: a sharp jolt left, right or up bumps the table that way. How sharp: the sensitivity
         // (m/s² without gravity; holding the phone and walking stay under 3).
-        var shakeLevels = { off: null, low: 18, medium: 12, high: 8 };
-        var shakeOrder = ['off', 'low', 'medium', 'high'];
+        var shakeLevels = { off: null, gentle: 8, firm: 12, hard: 18 }; // the jolt that nudges, in m/s²
+        var shakeNames = { off: 'Off', gentle: 'Gentle', firm: 'Firm', hard: 'Hard' };
         var shake = store('shake');
-        if (!(shake in shakeLevels)) shake = shake === 'off' ? 'off' : 'medium'; // 'on' before there were levels
+        // Earlier settings: on/off, then sensitivities (high sensitivity was the gentlest jolt)
+        shake = { high: 'gentle', medium: 'firm', low: 'hard', on: 'firm' }[shake] || (shake in shakeLevels ? shake : 'firm');
         var lastNudge = 0, gravity = null, motionAsked = false;
 
         // Is there a motion sensor? Browsers have the API with or without one, so only real readings tell (phones,
@@ -921,8 +986,8 @@
             osc.start(t);
             osc.stop(t + .2);
         }
-        function askForMotion() {
-            if (motionAsked || motion !== 'ask' || shake === 'off') return;
+        function askForMotion(fromMenu) {
+            if (motionAsked || motion !== 'ask' || (shake === 'off' && !fromMenu)) return;
             motionAsked = true;
             DeviceMotionEvent.requestPermission().then(function (answer) {
                 motion = answer === 'granted' ? 'checking' : 'none';
@@ -983,7 +1048,7 @@
             tester.querySelectorAll('[data-level]').forEach(function (el) {
                 el.classList.toggle('on', el.dataset.level === shake);
             });
-            tester.querySelector('[data-test="sound"]').textContent = 'Sound when it nudges: ' + (nudgeSound ? 'on' : 'off');
+            tester.querySelector('[data-test="sound"]').setAttribute('aria-checked', nudgeSound ? 'true' : 'false');
         }
         function openTester() {
             testing = true;
@@ -1011,9 +1076,10 @@
             }
         }
         tester.addEventListener('click', function (e) {
-            var level = e.target.dataset && e.target.dataset.level, test = e.target.dataset && e.target.dataset.test;
+            var button = e.target.closest && e.target.closest('button');
+            var level = button && button.dataset.level, test = button && button.dataset.test;
             unlockAudio();
-            if (level && e.target.tagName === 'BUTTON') {
+            if (level) {
                 shake = level;
                 store('shake', shake);
                 setShakeLabel();
@@ -1032,33 +1098,60 @@
         function setShakeLabel() {
             var button = document.querySelector('[data-action="shake"]');
             button.disabled = motion === 'checking' || motion === 'none';
-            document.querySelector('[data-action="shake-test"]').disabled = motion !== 'yes';
-            button.textContent = 'Shake to nudge: ' + (
-                motion === 'none' ? 'no motion sensor' :
-                motion === 'checking' ? 'looking for a motion sensor...' :
-                motion === 'ask' && shake !== 'off' ? 'tap to allow motion access' :
-                shake === 'off' ? 'off' : shake + ' sensitivity');
+            button.querySelector('.value').textContent =
+                motion === 'none' ? 'No motion sensor' :
+                motion === 'checking' ? 'Looking for a sensor...' :
+                motion === 'ask' && shake !== 'off' ? 'Allow motion access' : shakeNames[shake];
         }
         setShakeLabel();
-        document.getElementById('open-menu').addEventListener('click', function () { menu.classList.add('open'); });
+
+        // The menu shows each setting as it is now
+        function refreshMenu() {
+            var state = call('web_game_state'), full = document.fullscreenElement || document.webkitFullscreenElement;
+            document.getElementById('corner-fullscreen').textContent = full ? 'Exit full screen' : 'Full screen';
+            var setSwitch = function (action, on) {
+                document.querySelector('[data-action="' + action + '"]').setAttribute('aria-checked', on ? 'true' : 'false');
+            };
+            setSwitch('sounds', state & 16);
+            setSwitch('music', state & 32);
+            setSwitch('game-menu', state & 64);
+            setSwitch('fullscreen', full);
+            var pause = document.querySelector('[data-action="pause"]');
+            pause.textContent = state & 4 ? 'Resume' : 'Pause';
+            pause.disabled = (state & 3) !== 0; // nothing to pause after a game or in the demo
+            setShakeLabel();
+        }
+        function openMenu() {
+            refreshMenu();
+            menu.classList.add('open');
+        }
+        document.addEventListener('fullscreenchange', refreshMenu);
+        document.addEventListener('webkitfullscreenchange', refreshMenu);
+        document.getElementById('open-menu').addEventListener('click', openMenu);
         document.getElementById('bar-scores').addEventListener('click', function () { call('web_show_high_scores'); });
         document.getElementById('corner-scores').addEventListener('click', function () { call('web_show_high_scores'); });
-        document.getElementById('corner-menu').addEventListener('click', function () { menu.classList.add('open'); });
+        document.getElementById('corner-menu').addEventListener('click', openMenu);
         menu.addEventListener('click', function (e) {
-            var action = e.target.getAttribute && e.target.getAttribute('data-action');
+            var target = e.target.closest && e.target.closest('[data-action]');
+            var action = target && target.getAttribute('data-action');
             if (e.target === menu) action = 'close';
-            if (!action) return;
+            if (!action || (target && target.disabled)) return;
+            // Switches flip in place, with the menu left open to show it
+            if (action === 'sounds' || action === 'music' || action === 'game-menu' || action === 'fullscreen') {
+                if (action === 'sounds') press(Binding.ToggleSounds, true);
+                else if (action === 'music') press(Binding.ToggleMusic, true);
+                else if (action === 'fullscreen') Module.toggleFullscreen();
+                else {
+                    var show = !(call('web_game_state') & 64);
+                    store('menuHidden', show ? 'no' : 'yes');
+                    call('web_show_menu', [show ? 1 : 0]);
+                }
+                refreshMenu();
+                return;
+            }
             if (action === 'new-game') press(Binding.NewGame, true);
             else if (action === 'pause') press(Binding.TogglePause, true);
             else if (action === 'scores') call('web_show_high_scores');
-            else if (action === 'sounds') press(Binding.ToggleSounds, true);
-            else if (action === 'music') press(Binding.ToggleMusic, true);
-            else if (action === 'fullscreen') Module.toggleFullscreen();
-            else if (action === 'game-menu') {
-                var hidden = store('menuHidden') !== 'no';
-                store('menuHidden', hidden ? 'no' : 'yes');
-                call('web_show_menu', [hidden ? 1 : 0]);
-            }
             else if (action === 'table') {
                 playTable(table === 'xp' ? 'fulltilt' : 'xp');
                 return;
@@ -1080,17 +1173,11 @@
                 FS.syncfs(false, function () { location.reload(); });
                 return;
             }
-            else if (action === 'shake-test') {
+            else if (action === 'shake') {
+                // The shake test is where it's set; iOS asks for motion access first (from this tap)
+                if (motion === 'ask') askForMotion(true);
                 unlockAudio();
                 openTester();
-            }
-            else if (action === 'shake') {
-                if (motion === 'ask' && shake !== 'off') { askForMotion(); return; } // iOS: allow it first
-                shake = shakeOrder[(shakeOrder.indexOf(shake) + 1) % shakeOrder.length];
-                store('shake', shake);
-                setShakeLabel();
-                askForMotion();
-                return;
             }
             menu.classList.remove('open');
         });
