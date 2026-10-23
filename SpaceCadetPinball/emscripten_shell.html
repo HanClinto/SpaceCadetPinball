@@ -494,15 +494,15 @@
             <div class="meter">
                 <div class="fill"></div>
                 <div class="peak"></div>
-                <div class="mark" data-level="gentle"><span>gentle</span></div>
-                <div class="mark" data-level="firm"><span>firm</span></div>
-                <div class="mark" data-level="hard"><span>hard</span></div>
+                <div class="mark" data-level="light"><span>light</span></div>
+                <div class="mark" data-level="medium"><span>medium</span></div>
+                <div class="mark" data-level="heavy"><span>heavy</span></div>
             </div>
             <div class="levels">
                 <button type="button" data-level="off">Off</button>
-                <button type="button" data-level="gentle">Gentle</button>
-                <button type="button" data-level="firm">Firm</button>
-                <button type="button" data-level="hard">Hard</button>
+                <button type="button" data-level="light">Light</button>
+                <button type="button" data-level="medium">Medium</button>
+                <button type="button" data-level="heavy">Heavy</button>
             </div>
             <div class="result"></div>
             <button type="button" class="row" data-test="sound" role="switch" aria-checked="true">
@@ -917,11 +917,12 @@
 
         // Shake to nudge: a sharp jolt left, right or up bumps the table that way. How sharp: the sensitivity
         // (m/s² without gravity; holding the phone and walking stay under 3).
-        var shakeLevels = { off: null, gentle: 8, firm: 12, hard: 18 }; // the jolt that nudges, in m/s²
-        var shakeNames = { off: 'Off', gentle: 'Gentle', firm: 'Firm', hard: 'Hard' };
+        var shakeLevels = { off: null, light: 8, medium: 12, heavy: 18 }; // the jolt that nudges, in m/s²
+        var shakeNames = { off: 'Off', light: 'Light', medium: 'Medium', heavy: 'Heavy' };
         var shake = store('shake');
-        // Earlier settings: on/off, then sensitivities (high sensitivity was the gentlest jolt)
-        shake = { high: 'gentle', medium: 'firm', low: 'hard', on: 'firm' }[shake] || (shake in shakeLevels ? shake : 'firm');
+        // Earlier settings: on/off; sensitivities (high sensitivity was the lightest jolt); gentle, firm, hard
+        shake = { on: 'medium', high: 'light', low: 'heavy', gentle: 'light', firm: 'medium', hard: 'heavy' }[shake] ||
+            (shake in shakeLevels ? shake : 'medium');
         var lastNudge = 0, gravity = null, motionAsked = false;
 
         // Is there a motion sensor? Browsers have the API with or without one, so only real readings tell (phones,
